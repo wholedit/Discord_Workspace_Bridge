@@ -12,7 +12,7 @@
 | `🟢 Done` / `🔴 Error` | 작업 끝 |
 | 봇의 답장 | 결과. 이건 폰 알림이 울림 |
 
-<!-- screenshot: images/phone-progress.png -->
+<img src="images/phone-progress.png" alt="작업 채널: 요청 → 진행 메시지 → 답장" width="320">
 
 - **이미지·파일 첨부**도 보낼 수 있습니다.
 - 대화는 이어집니다. PC나 실행 관리자를 다시 시작해도 **그 워크스페이스의 대화**를 계속합니다.
@@ -21,7 +21,7 @@
 ### 승인 요청 (DM)
 파일 수정이나 명령 실행에 승인이 필요하면 **그 워크스페이스의 봇이 DM으로** 🔐 요청과 **[See more] [Allow] [Deny]** 버튼을 보냅니다. 얼마나 자주 묻는지는 권한 모드로 정합니다.
 
-<!-- screenshot: images/phone-approval-dm.png -->
+<img src="images/phone-approval-dm.png" alt="봇 DM의 승인 요청" width="320">
 
 ### 권한 모드
 
@@ -52,7 +52,7 @@
 | `/ping` | PC 가동 시간, CPU, 메모리, 디스크, 절전 방지 |
 | `/lockdown confirm:True` | 비상 정지: 모든 워크스페이스 중지. 다시 켜려면 `/restart ws:all` |
 
-<!-- screenshot: images/phone-dashboard.png -->
+<img src="images/phone-dashboard.png" alt="/dashboard 결과" width="320">
 
 ### 자동 알림
 
@@ -67,7 +67,7 @@
 | PC에서 워크스페이스 추가·삭제 | ➕ / ➖ | 조용히 |
 | 실행 관리자 종료 | ⚪ Supervisor stopped | 조용히 |
 
-<!-- screenshot: images/phone-alerts.png -->
+<img src="images/phone-alerts.png" alt="#control 자동 알림" width="320">
 
 ## PC 명령 모음
 

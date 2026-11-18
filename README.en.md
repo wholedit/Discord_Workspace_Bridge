@@ -6,7 +6,7 @@ One channel = one bot = one project folder on your PC. Leave the PC on; from any
 [한국어](README.md)
 
 <!-- screenshot: docs/images/demo.gif (optional) -->
-<!-- screenshot: docs/images/phone-progress.png -->
+<img src="docs/images/phone-progress.png" alt="Work channel: request → progress message → reply" width="320">
 
 ```
  📱 Discord on your phone                🖥️ PC at home / office (left on)

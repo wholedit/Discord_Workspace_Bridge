@@ -31,7 +31,7 @@ npm run setup
 | 3. 워크스페이스 | 목록·상태, 추가, 폴더 신뢰 확인, 삭제 |
 | 4. 관리용 봇 | `#control` 봇 추가·바꾸기·삭제 (선택) |
 
-<!-- screenshot: images/setup-overview.png -->
+<img src="images/setup-overview.png" alt="설정 페이지" width="640">
 
 ## 3) 워크스페이스 추가
 
@@ -39,10 +39,10 @@ npm run setup
 
 1. **봇 만들기**: [디스코드 개발자 포털](https://discord.com/developers/applications) → **New Application** → 이름 (예: `web-bot`) → 왼쪽 **Bot** → **Reset Token** → 복사
 2. **토큰 붙여 넣기**: 바로 확인하고 봇 이름을 보여 줍니다. 토큰은 화면에 표시되지 않습니다.
-3. **봇 설정 확인**: **MESSAGE CONTENT INTENT 켜기**, **PUBLIC BOT 끄기** → Save Changes. 페이지가 그 봇의 설정 화면 링크를 주고, 저장하면 자동으로 다시 확인합니다.
-   <!-- screenshot: images/portal-bot-settings.png -->
+3. **봇 설정 확인**: **MESSAGE CONTENT INTENT 켜기**, **PUBLIC BOT 끄기**(한국어 화면에서는 "공개 봇") → 변경 사항 저장. 페이지가 그 봇의 설정 화면 링크를 주고, 저장하면 자동으로 다시 확인합니다.
+   <img src="images/portal-bot-settings.png" alt="개발자 포털 Bot 설정: 공개 봇 끔, Message Content Intent 켬">
 4. **서버에 초대**: 초대 버튼 → 내 개인 서버 선택 → 승인. 봇이 들어오면 자동으로 다음 단계로 넘어갑니다.
-   <!-- screenshot: images/setup-wizard.png -->
+   <img src="images/setup-wizard.png" alt="워크스페이스 추가 단계" width="640">
 5. **채널 고르기**: 이미 다른 워크스페이스나 관리용 봇이 쓰는 채널은 고를 수 없습니다. 새 채널을 만들었다면 **새로고침**.
 6. **작업 폴더**: 경로를 입력하거나 **찾아보기…** (PC에 폴더 선택 창이 뜹니다).
 7. **내 디스코드 계정**: 이 워크스페이스에 일을 시킬 수 있는 단 하나의 계정. 승인 요청 DM도 이 계정으로 옵니다. 보통 서버 소유자(본인)를 그대로 고르면 됩니다.
@@ -51,7 +51,7 @@ npm run setup
    - 실행 관리자가 꺼져 있으면 **백그라운드로 시작**을 누릅니다.
    - 처음 쓰는 폴더면 🔐 **폴더 신뢰 확인 필요**가 뜹니다. **PC에서 신뢰 확인 창 열기** → 새 창에서 `Yes, I trust this folder` → `/exit` 입력. 이 질문은 보안 확인이라 프로그램이 대신 답하지 않습니다.
    - 봇이 온라인이 되면 ✅가 뜹니다 (보통 30초~2분). 폰에서 그 채널에 메시지를 보내 보세요.
-   <!-- screenshot: images/setup-first-run.png -->
+   <img src="images/setup-first-run.png" alt="첫 실행: 연결됨" width="640">
 
 두 번째 워크스페이스부터는 같은 과정을 반복합니다. 실행 관리자가 켜져 있으면 저장하자마자 자동으로 시작됩니다.
 
