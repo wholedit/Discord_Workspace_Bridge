@@ -73,11 +73,20 @@ export function sessionExists(ws: Workspace, id: string, claudeHome?: string): b
 const HOOK_SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "hooks", "progress-hook.mjs");
 export const eventsFile = (ws: Workspace) => path.join(stateDir(ws.name), "events.jsonl");
 
-/** Settings passed with --settings: async hooks that append tool/turn events for the supervisor to show in Discord. */
+/** The official Discord plugin's MCP server: reply, react, edit_message, download_attachment, … */
+export const PLUGIN_MCP_SERVER = "mcp__plugin_discord_discord";
+
+/**
+ * Settings passed with --settings:
+ * - permissions: the Discord plugin's own tools are always allowed. They only talk back to the owner's channel;
+ *   without this, manual mode asks for approval just to send the answer.
+ * - hooks: async hooks that append tool/turn events for the supervisor to show in Discord.
+ */
 export function hookSettings(nodePath = process.execPath, script = HOOK_SCRIPT) {
   const cmd = `"${nodePath.replace(/\\/g, "/")}" "${script.replace(/\\/g, "/")}"`;
   const h = (matcher?: string) => [{ ...(matcher ? { matcher } : {}), hooks: [{ type: "command", command: cmd, async: true, timeout: 10 }] }];
   return {
+    permissions: { allow: [PLUGIN_MCP_SERVER] },
     hooks: {
       UserPromptSubmit: h(),
       PreToolUse: h("*"),

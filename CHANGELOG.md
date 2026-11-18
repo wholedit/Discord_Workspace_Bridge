@@ -10,5 +10,7 @@ First public version. Windows 10/11.
 - **Manager bot** (`#control`): `/dashboard`, `/status`, `/stop`, `/restart`, `/new`, `/mode`, `/logs`, `/ping`, `/lockdown`; alerts for failures, folder trust, plugin problems, restarts.
 - **Permission modes**: `auto` (default), `manual`, `acceptEdits`, `plan`.
 - **Always on**: background run (`start:bg`, `stop`, `logs`), start at Windows sign-in, sleep prevention while running.
+- The Discord plugin's own tools (reply, react, attachments) never ask for approval, so `manual` mode only asks about real work.
+- "Supervisor online" is posted once the bots have connected, so the dashboard in it shows real states.
 - Works on networks that inspect HTTPS (uses the Windows certificate store).
 - Works around claude passing a debugger setting to Bun-based plugins on Windows (`bun.exe` wrapper).

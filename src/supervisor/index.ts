@@ -80,7 +80,12 @@ function keepAwake(log: (m: string) => void): ChildProcess | null {
   }
 }
 
-const sameWorkspace = (a: Workspace, b: Workspace) => a.botId === b.botId && a.channelId === b.channelId && a.folder === b.folder && a.userId === b.userId;
+/** True when no workspace is still starting up: each bot is connected or failed, or the workspace needs a person. */
+export function onlineSettled(list: { state: string; plugin: string }[]): boolean {
+  return list.every((w) => (w.state === "running" && w.plugin !== "unknown") || ["failed", "needs-trust", "stopped"].includes(w.state));
+}
+
+const sameWorkspace =(a: Workspace, b: Workspace) => a.botId === b.botId && a.channelId === b.channelId && a.folder === b.folder && a.userId === b.userId;
 
 export async function runSupervisor(opts: { only?: string[]; fresh?: string[] } = {}) {
   const wanted = (w: Workspace) => !opts.only?.length || opts.only.includes(w.name);
@@ -256,6 +261,27 @@ export async function runSupervisor(opts: { only?: string[]; fresh?: string[] } 
     lockedDown: () => lockedDown,
   };
 
+  /**
+   * Post "Supervisor online" with the dashboard once every workspace has settled (bot connected, failed, or waiting
+   * for folder trust), so it shows real states instead of "connecting…". Gives up waiting after 3 minutes.
+   */
+  let announceTimer: NodeJS.Timeout | undefined;
+  function announceOnline() {
+    clearInterval(announceTimer);
+    const since = Date.now();
+    const post = () => {
+      clearInterval(announceTimer);
+      alert(`🟢 **Supervisor online** on ${os.hostname()}\n${renderDashboard(runners.map(toInfo), Date.now(), lockedDown)}`);
+    };
+    const check = () => {
+      if (stopping) return clearInterval(announceTimer);
+      if (onlineSettled(runners.map(toInfo)) || Date.now() - since > 180_000) post();
+    };
+    announceTimer = setInterval(check, 3000);
+    cleanups.push(() => clearInterval(announceTimer));
+    check();
+  }
+
   /** Start, restart or stop the manager bot to match manager.json (it can be set up while we run). */
   async function syncManager(first: boolean) {
     const mcfg = loadManager();
@@ -274,7 +300,7 @@ export async function runSupervisor(opts: { only?: string[]; fresh?: string[] } 
     }
     try {
       manager = await startManager(mcfg!, mtoken!, controller, log);
-      alert(`🟢 **Supervisor online** on ${os.hostname()}\n${renderDashboard(runners.map(toInfo))}`);
+      announceOnline();
     } catch (e) {
       log(`[manager] could not start: ${e instanceof Error ? e.message : e} (re-register it with: npm run setup)`);
     }

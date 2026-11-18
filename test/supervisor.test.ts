@@ -329,3 +329,20 @@ test("restart starts exactly one new claude (late exit of the old one is ignored
   assert.notEqual(r.state, "restarting");
   r.stop();
 });
+
+test("plugin tools are pre-approved so manual mode doesn't ask just to reply", async () => {
+  const { hookSettings, PLUGIN_MCP_SERVER } = await import("../src/supervisor/spec.js");
+  const s = hookSettings("node", "hook.mjs");
+  assert.deepEqual(s.permissions.allow, [PLUGIN_MCP_SERVER]);
+  assert.equal(PLUGIN_MCP_SERVER, "mcp__plugin_discord_discord");
+  assert.ok(s.hooks.PreToolUse);
+});
+
+test("online alert waits until every workspace has settled", async () => {
+  const { onlineSettled } = await import("../src/supervisor/index.js");
+  assert.equal(onlineSettled([{ state: "running", plugin: "unknown" }]), false);
+  assert.equal(onlineSettled([{ state: "starting", plugin: "unknown" }]), false);
+  assert.equal(onlineSettled([{ state: "running", plugin: "connected" }, { state: "needs-trust", plugin: "unknown" }, { state: "failed", plugin: "unknown" }]), true);
+  assert.equal(onlineSettled([{ state: "running", plugin: "failed" }]), true);
+  assert.equal(onlineSettled([]), true);
+});
