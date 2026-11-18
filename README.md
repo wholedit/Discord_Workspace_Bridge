@@ -5,6 +5,9 @@
 
 [English](README.en.md)
 
+<!-- screenshot: docs/images/demo.gif (선택) -->
+<!-- screenshot: docs/images/phone-progress.png -->
+
 ```
  📱 폰의 디스코드                       🖥️ 집·사무실 PC (켜 둠)
  ├ #web     ← web-bot    ─────────▶  claude (C:\projects\web)
@@ -42,6 +45,8 @@ npm run setup
 ```
 
 브라우저에 설정 페이지가 열리면 안내대로 따라 하세요. PC 점검 → 봇 만들기 → 토큰 → 초대 → 채널 → 폴더 → 실행 → 자동 시작.
+
+<!-- screenshot: docs/images/setup-overview.png -->
 
 ## 문서
 

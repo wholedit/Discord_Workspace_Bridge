@@ -5,6 +5,9 @@ One channel = one bot = one project folder on your PC. Leave the PC on; from any
 
 [한국어](README.md)
 
+<!-- screenshot: docs/images/demo.gif (optional) -->
+<!-- screenshot: docs/images/phone-progress.png -->
+
 ```
  📱 Discord on your phone                🖥️ PC at home / office (left on)
  ├ #web     ← web-bot    ─────────▶  claude (C:\projects\web)

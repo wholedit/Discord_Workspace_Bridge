@@ -34,6 +34,7 @@
 
 - **일 시키기**: 워크스페이스 채널에 할 일을 씀 → 👀 → 진행 메시지 → 답장
 - **승인**: DM 알림 → [See more]로 내용 확인 → [Allow] / [Deny]
+  <!-- screenshot: images/phone-approval-dm.png -->
 - **잘못 시켰을 때**: `#control`에서 `/stop ws:web` (작업만 중단, 대화는 유지)
 - **답이 이상하거나 맥락이 꼬였을 때**: `/new ws:web` (새 대화)
 - **PC가 살아 있나**: `/ping` 또는 봇들이 온라인인지 보기 (봇이 오프라인 = 그 워크스페이스나 PC가 꺼짐)
