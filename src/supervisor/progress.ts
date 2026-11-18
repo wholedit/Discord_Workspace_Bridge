@@ -24,7 +24,10 @@ export class ProgressReporter {
   private ticker?: NodeJS.Timeout;
   private chain: Promise<unknown> = Promise.resolve();
 
-  constructor(private sink: MessageSink, private opts: { minEditMs?: number; tickMs?: number; now?: () => number; onError?: (e: unknown) => void } = {}) {}
+  constructor(
+    private sink: MessageSink,
+    private opts: { minEditMs?: number; tickMs?: number; now?: () => number; onError?: (e: unknown) => void; baseFolder?: string } = {},
+  ) {}
 
   private now() {
     return this.opts.now?.() ?? Date.now();
@@ -40,7 +43,7 @@ export class ProgressReporter {
         if (!ev.tool || QUIET_TOOL.test(ev.tool)) return;
         const t = this.ensureTurn(ev.t);
         t.phase = "running";
-        t.lines.push((ev.sub ? "↳ " : "") + describeTool(ev.tool, ev.input ?? {}));
+        t.lines.push((ev.sub ? "↳ " : "") + describeTool(ev.tool, ev.input ?? {}, this.opts.baseFolder));
         this.scheduleEdit();
         break;
       }

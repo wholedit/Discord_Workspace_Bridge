@@ -33,10 +33,17 @@ export function chunkText(text: string, limit = DISCORD_LIMIT - 20): string[] {
 }
 
 /** One short line describing a tool call, sized for a phone screen. */
-export function describeTool(name: string, input: Record<string, unknown>): string {
+export function describeTool(name: string, input: Record<string, unknown>, baseFolder?: string): string {
   const s = (v: unknown) => (typeof v === "string" ? v : "");
   const short = (v: string, n = 60) => (v.length > n ? v.slice(0, n - 1) + "…" : v);
-  const file = (p: string) => p.split(/[\\/]/).slice(-2).join("/");
+  // Inside the workspace: path relative to it (src/app.ts). Elsewhere: last two parts.
+  const file = (p: string) => {
+    const norm = (x: string) => x.replace(/\\/g, "/").replace(/\/+$/, "");
+    const fp = norm(p);
+    const base = baseFolder ? norm(baseFolder) : "";
+    if (base && fp.toLowerCase().startsWith(base.toLowerCase() + "/")) return fp.slice(base.length + 1);
+    return fp.split("/").slice(-2).join("/");
+  };
 
   switch (name) {
     case "Read":

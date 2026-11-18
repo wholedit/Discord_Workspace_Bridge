@@ -29,6 +29,11 @@ test("tool descriptions are short and readable", () => {
   assert.equal(describeTool("Bash", { command: "npm test" }), "▶️ npm test");
   assert.ok(describeTool("Bash", { command: "x".repeat(200) }).length < 70);
   assert.equal(describeTool("SomethingNew", {}), "🔧 SomethingNew");
+  // relative to the workspace folder, including folders with spaces and either slash style
+  const base = "C:\\noah\\discord test web";
+  assert.equal(describeTool("Write", { file_path: "C:\\noah\\discord test web\\index.html" }, base), "📝 Write index.html");
+  assert.equal(describeTool("Write", { file_path: "C:/noah/discord test web/css/style.css" }, base), "📝 Write css/style.css");
+  assert.equal(describeTool("Read", { file_path: "C:\\other\\proj\\a.ts" }, base), "📖 Read proj/a.ts");
 });
 
 test("status keeps only the last lines", () => {

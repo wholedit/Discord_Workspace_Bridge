@@ -120,7 +120,7 @@ export async function runSupervisor(opts: { only?: string[]; fresh?: string[] } 
           send: async (c) => (await rest.sendMessage(ws.channelId, c)).id,
           edit: async (id, c) => void (await rest.editMessage(ws.channelId, id, c)),
         },
-        { onError: (e) => log(`[${ws.name}] progress message failed: ${e instanceof Error ? e.message : e}`) },
+        { baseFolder: ws.folder, onError: (e) => log(`[${ws.name}] progress message failed: ${e instanceof Error ? e.message : e}`) },
       );
       fs.writeFileSync(eventsFile(ws), ""); // start each run with an empty event log
       const stopTail = tailEvents(eventsFile(ws), (ev) => reporter.handle(ev));
