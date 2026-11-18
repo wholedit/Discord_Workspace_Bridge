@@ -147,3 +147,32 @@ test("network errors are explained, including HTTPS inspection", async () => {
   assert.deepEqual(await api.pingDiscord(async () => ({ ok: true, status: 200, json: async () => ({}) })), { ok: true, detail: "reachable" });
   assert.equal((await api.pingDiscord(failing)).ok, false);
 });
+
+test("every failed check explains what to do, with copyable commands and real links", () => {
+  for (const [id, make] of Object.entries(check.FIXES)) {
+    const steps = (make as (d: string) => import("../src/check.js").FixStep[])("detail");
+    assert.ok(steps.length > 0, id);
+    for (const s of steps) {
+      assert.ok(s.text.length > 5, `${id}: step text`);
+      if (s.cmd) assert.ok(!s.cmd.includes("\n"), `${id}: one-line command`);
+      if (s.link) assert.match(s.link.url, /^https:\/\//, `${id}: https link`);
+    }
+  }
+  assert.match(check.FIXES.pluginInstall()[0].cmd!, /^claude plugin install discord@claude-plugins-official$/);
+  assert.equal(check.fixLine([{ text: "a", cmd: "b" }, { text: "c", link: { url: "https://x", label: "x" } }]), "a b / c https://x");
+});
+
+test("optional misses don't count as problems; blocked ones do", () => {
+  const r = (o: Partial<import("../src/check.js").CheckResult>) => ({ id: "x", name: "x", ok: false, detail: "", ...o });
+  assert.equal(check.problems([r({ ok: true }), r({ optional: true }), r({ blocked: true }), r({})]).length, 2);
+});
+
+test("fresh PATH keeps what we had and adds nothing twice", () => {
+  if (process.platform !== "win32") {
+    assert.equal(check.freshPath({ PATH: "/a:/b" }), "/a:/b");
+    return;
+  }
+  const parts = check.freshPath({ PATH: "C:\\a;C:\\b;c:\\A" })!.split(";");
+  assert.ok(parts.includes("C:\\a") && parts.includes("C:\\b"));
+  assert.equal(parts.filter((x) => x.toLowerCase() === "c:\\a").length, 1);
+});

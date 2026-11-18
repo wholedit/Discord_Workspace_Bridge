@@ -1,6 +1,6 @@
 # 1. 준비물
 
-설정 페이지(`npm run setup`)의 **1. 이 PC 점검**이 아래 항목을 자동으로 확인하고, 빠진 것은 고치는 방법을 보여 줍니다. 터미널에서는 `npm run check`로 같은 점검을 할 수 있습니다.
+설정 페이지(`npm run setup`)의 **1. 이 PC 점검**이 아래 항목을 자동으로 확인합니다. 준비 안 된 항목에는 **"이것부터"** 표시와 함께 단계별 방법, 복사 버튼이 붙은 명령, 설치 페이지 링크가 나옵니다. 설치한 뒤 **다시 점검**을 누르면 됩니다 (페이지를 다시 열 필요 없음). 터미널에서는 `npm run check`로 같은 점검을 할 수 있습니다.
 
 ## 필요한 것
 
@@ -22,7 +22,11 @@
 https://nodejs.org 에서 LTS 버전을 설치합니다.
 
 ### 2) Claude Code
-설치 방법: https://code.claude.com/docs/en/quickstart
+PowerShell에서 실행합니다 (다른 방법: [설치 안내](https://code.claude.com/docs/en/quickstart)).
+
+```powershell
+irm https://claude.ai/install.ps1 | iex
+```
 
 설치한 뒤 터미널에서 한 번 실행해 **내 Claude 계정으로 로그인**합니다.
 
@@ -40,16 +44,16 @@ powershell -c "irm bun.sh/install.ps1 | iex"
 ```
 
 ### 4) 공식 디스코드 플러그인
-`claude`를 실행하고 프롬프트에 입력합니다. 설치 범위는 **user scope**를 고릅니다.
+터미널에서 실행합니다.
 
-```
-/plugin install discord@claude-plugins-official
+```bash
+claude plugin install discord@claude-plugins-official
 ```
 
-`Marketplace "claude-plugins-official" not found`가 나오면 먼저 아래를 입력합니다.
+`marketplace not found` 오류가 나면 먼저 아래를 실행한 뒤 위 명령을 다시 실행합니다.
 
-```
-/plugin marketplace add anthropics/claude-plugins-official
+```bash
+claude plugin marketplace add anthropics/claude-plugins-official
 ```
 
 > `/discord:configure`는 **쓰지 마세요.** 기본 폴더에 토큰을 저장해서 이후 여는 모든 `claude`가 그 봇으로 접속하려고 합니다. 토큰은 이 프로그램이 워크스페이스별 폴더에 따로 저장합니다.

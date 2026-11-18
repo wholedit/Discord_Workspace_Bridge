@@ -105,26 +105,57 @@ function renderChecks() {
     c.append(h("p", { class: "muted spin" }, "Node, Claude Code 로그인, Bun, 공식 디스코드 플러그인을 확인하는 중"));
     return;
   }
-  const bad = checks.filter((r) => !r.ok).length;
+  const problems = checks.filter((r) => !r.ok && !r.optional);
+  const first = problems.find((r) => !r.blocked);
+  const icon = (r) => (r.ok ? ["ok", "✓"] : r.optional ? ["muted", "–"] : r.blocked ? ["muted", "⏸"] : ["bad", "✗"]);
   c.append(
     h(
       "ul",
       { class: "list" },
-      checks.map((r) =>
-        h(
+      checks.map((r) => {
+        const [cls, mark] = icon(r);
+        return h(
           "li",
           { class: "check" },
-          h("span", { class: r.ok ? "ok" : "bad" }, r.ok ? "✓" : "✗"),
-          h("span", {}, h("b", {}, r.name), " ", h("span", { class: "muted" }, r.detail)),
-          !r.ok && r.fix ? h("span", { class: "fix" }, r.fix) : null,
-        ),
-      ),
+          h("span", { class: cls }, mark),
+          h(
+            "span",
+            {},
+            h("b", { class: r.blocked ? "muted" : "" }, r.name),
+            " ",
+            h("span", { class: "muted" }, r.detail),
+            r === first ? h("span", { class: "pill first" }, "이것부터") : null,
+          ),
+          !r.ok && !r.blocked && r.steps ? renderSteps(r.steps, r.optional) : null,
+        );
+      }),
     ),
     h(
       "div",
       { class: "row" },
-      h("span", { class: bad ? "bad grow" : "ok grow" }, bad ? `고칠 항목 ${bad}개. 고친 뒤 다시 점검하세요.` : "모두 준비됐습니다."),
+      h(
+        "span",
+        { class: problems.length ? "bad grow" : "ok grow" },
+        problems.length ? `준비 안 된 항목 ${problems.length}개. 위에서부터 차례로 고친 뒤 '다시 점검'을 누르세요.` : "모두 준비됐습니다.",
+      ),
       h("button", { class: "ghost", onclick: loadChecks }, "다시 점검"),
+    ),
+  );
+}
+
+/** Fix steps: text, a command with a copy button, or a link button. */
+function renderSteps(steps, quiet) {
+  return h(
+    "ol",
+    { class: "fix" + (quiet ? " quiet" : "") },
+    steps.map((s) =>
+      h(
+        "li",
+        {},
+        s.text,
+        s.cmd ? h("div", { class: "cmd" }, code(s.cmd), copyButton(s.cmd)) : null,
+        s.link ? h("div", { class: "cmd" }, h("a", { class: "button ghost", href: s.link.url, target: "_blank", rel: "noopener noreferrer" }, s.link.label + " ↗")) : null,
+      ),
     ),
   );
 }

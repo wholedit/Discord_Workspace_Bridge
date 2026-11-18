@@ -91,7 +91,13 @@ ol, ul { padding-left: 20px; margin: 6px 0; }
 .list > li { padding: 10px 0; border-top: 1px solid var(--line); }
 .list > li:first-child { border-top: 0; }
 .check { display: grid; grid-template-columns: 22px 1fr; gap: 2px 6px; }
-.check .fix { grid-column: 2; color: var(--muted); font-size: 13px; }
+.check .fix { grid-column: 2; margin: 8px 0 2px; padding-left: 20px; font-size: 14px; }
+.check .fix li { margin: 6px 0; }
+.check .fix.quiet { color: var(--muted); }
+.check .cmd { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
+.check .cmd code { font-size: 13px; padding: 4px 8px; }
+.check .cmd button, .check .cmd .button { padding: 3px 10px; font-size: 13px; }
+.pill.first { margin-left: 6px; border-color: var(--bad); color: var(--bad); }
 .step { border-left: 3px solid var(--line); padding: 2px 0 2px 14px; margin: 14px 0; }
 .step.done { border-color: var(--ok); }
 .step.active { border-color: var(--accent); }

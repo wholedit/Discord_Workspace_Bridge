@@ -8,7 +8,7 @@ import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { homeDir } from "./workspaces.js";
-import { cleanEnv } from "./supervisor/spec.js";
+import { freshEnv } from "./check.js";
 import { logFile, supervisorPid } from "./supervisor/control.js";
 
 export const TASK_NAME = "workspace-bridge";
@@ -165,7 +165,7 @@ export function startInBackground(): { ok: boolean; detail: string } {
   const fd = fs.openSync(log, "a");
   const [exe, ...args] = supervisorCommand("start");
   try {
-    const child = spawn(exe, args, { cwd: REPO_DIR, detached: true, stdio: ["ignore", fd, fd], windowsHide: true, env: cleanEnv() });
+    const child = spawn(exe, args, { cwd: REPO_DIR, detached: true, stdio: ["ignore", fd, fd], windowsHide: true, env: freshEnv() });
     child.unref();
   } finally {
     fs.closeSync(fd);

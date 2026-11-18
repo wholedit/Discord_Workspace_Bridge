@@ -14,11 +14,17 @@ switch (cmd) {
   case "check": {
     const results = await runChecks();
     for (const r of results) {
-      console.log(`${r.ok ? "✓" : "✗"} ${r.name.padEnd(48)} ${r.detail}`);
-      if (!r.ok && r.fix) console.log(`    → ${r.fix}`);
+      const mark = r.ok ? "✓" : r.optional ? "–" : r.blocked ? "⏸" : "✗";
+      console.log(`${mark} ${r.name}  ${r.detail}`);
+      if (r.ok || r.blocked) continue;
+      r.steps?.forEach((s, i) => {
+        console.log(`    ${i + 1}. ${s.text}`);
+        if (s.cmd) console.log(`         ${s.cmd}`);
+        if (s.link) console.log(`         ${s.link.url}`);
+      });
     }
-    const bad = results.filter((r) => !r.ok).length;
-    console.log(bad ? `\n${bad} item(s) to fix before launching.` : "\nAll good.");
+    const bad = results.filter((r) => !r.ok && !r.optional).length;
+    console.log(bad ? `\n준비 안 된 항목 ${bad}개. 위에서부터 차례로 고친 뒤 다시 실행하세요: npm run check` : "\n모두 준비됐습니다.");
     process.exitCode = bad ? 1 : 0;
     break;
   }
