@@ -123,6 +123,17 @@ export class WorkspaceRunner {
     this.watchPluginLog(startedAt);
   }
 
+  /** Interrupt the task in progress, like pressing Esc in claude. The session and process keep running. */
+  interrupt(): boolean {
+    if (!this.pty || (this.state !== "running" && this.state !== "starting")) return false;
+    try {
+      this.pty.write("\x1b");
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   /** Mark as failed without starting (e.g. the bot token no longer works). */
   markFailed(reason: string) {
     this.stopping = true;

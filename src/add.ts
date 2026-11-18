@@ -8,10 +8,10 @@ import { stdin, stdout } from "node:process";
 import { DiscordRest, DiscordApiError, botSettingsUrl, cleanToken, hasMessageContentIntent, inviteUrl, textChannels } from "./discordApi.js";
 import { loadWorkspaces, upsertWorkspace, validateWorkspace, writeStateDir, type Workspace } from "./workspaces.js";
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Ask without echoing what is typed or pasted (for the bot token). */
-async function askSecret(rl: Interface, q: string): Promise<string> {
+export async function askSecret(rl: Interface, q: string): Promise<string> {
   const r = rl as unknown as { _writeToOutput?: (s: string) => void };
   const original = r._writeToOutput;
   let muted = false;

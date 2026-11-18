@@ -12,7 +12,8 @@
     "test": "tsx --test test/*.test.ts",
     "start": "node --use-system-ca --import tsx src/cli.ts start",
     "status": "node --use-system-ca --import tsx src/cli.ts status",
-    "mode": "node --use-system-ca --import tsx src/cli.ts mode"
+    "mode": "node --use-system-ca --import tsx src/cli.ts mode",
+    "add-manager": "node --use-system-ca --import tsx src/cli.ts add-manager"
   },
   "keywords": [],
   "type": "module",

@@ -6,6 +6,7 @@ import { launchAll } from "./launch.js";
 import { loadWorkspaces } from "./workspaces.js";
 import { runSupervisor, printStatus } from "./supervisor/index.js";
 import { modeCommand } from "./mode.js";
+import { addManager } from "./manager/addManager.js";
 
 const [cmd, ...args] = process.argv.slice(2);
 
@@ -49,6 +50,9 @@ switch (cmd) {
   case "status":
     printStatus();
     break;
+  case "add-manager":
+    await addManager();
+    break;
   case "mode":
     modeCommand(args[0], args[1]);
     break;
@@ -70,6 +74,7 @@ switch (cmd) {
          -- --fresh=web         start these with a new conversation
   npm run status                show what the supervisor is doing
   npm run mode -- <name> <mode> permission mode: auto (default), manual, acceptEdits, plan
+  npm run add-manager           set up the manager bot (#control: /dashboard, /restart, /stop, alerts)
   npm run launch [-- names]     visible mode: open workspaces in Windows Terminal tabs
                                 (use once per folder to answer the trust question)
          -- --dry-run           show what would run

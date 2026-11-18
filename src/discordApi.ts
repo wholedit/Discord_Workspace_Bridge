@@ -113,8 +113,19 @@ export function hasMessageContentIntent(flags: number | undefined): boolean {
   return (f & FLAG_GATEWAY_MESSAGE_CONTENT) !== 0 || (f & FLAG_GATEWAY_MESSAGE_CONTENT_LIMITED) !== 0;
 }
 
-export function inviteUrl(applicationId: string, guildId?: string): string {
-  const q = new URLSearchParams({ client_id: applicationId, scope: "bot", permissions: PLUGIN_PERMISSIONS.toString() });
+/** Manager bot: View Channels, Send Messages, Embed Links, Read Message History (+ slash commands via scope). */
+export const MANAGER_PERMISSIONS = (1n << 10n) | (1n << 11n) | (1n << 14n) | (1n << 16n);
+
+export function inviteUrl(
+  applicationId: string,
+  guildId?: string,
+  opts: { permissions?: bigint; scopes?: string[] } = {},
+): string {
+  const q = new URLSearchParams({
+    client_id: applicationId,
+    scope: (opts.scopes ?? ["bot"]).join(" "),
+    permissions: (opts.permissions ?? PLUGIN_PERMISSIONS).toString(),
+  });
   if (guildId) {
     q.set("guild_id", guildId);
     q.set("disable_guild_select", "true");

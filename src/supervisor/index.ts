@@ -5,7 +5,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { DiscordApiError, DiscordRest } from "../discordApi.js";
 import { ensureBunShim } from "../bunShim.js";
-import { homeDir, loadWorkspaces, modeOf, stateDir, type Workspace } from "../workspaces.js";
+import os from "node:os";
+import { homeDir, loadWorkspaces, modeOf, saveWorkspaces, stateDir, type Workspace } from "../workspaces.js";
+import { loadManager, readManagerToken } from "../manager/config.js";
+import { startManager, type ManagerHandle } from "../manager/bot.js";
+import { renderDashboard, type Controller, type WorkspaceInfo } from "../manager/commands.js";
+import { getHostInfo } from "../manager/host.js";
 import { WorkspaceRunner } from "./runner.js";
 import { ProgressReporter, tailEvents } from "./progress.js";
 import { eventsFile, resolveClaude, type Shim } from "./spec.js";
@@ -20,6 +25,22 @@ function readToken(ws: Workspace): string | null {
   } catch {
     return null;
   }
+}
+
+function toInfo(r: WorkspaceRunner): WorkspaceInfo {
+  return {
+    name: r.ws.name,
+    channel: r.ws.channelName,
+    folder: r.ws.folder,
+    state: r.state,
+    detail: r.detail,
+    plugin: r.plugin,
+    mode: modeOf(r.ws),
+    pid: r.pid,
+    startedAt: r.startedAt,
+    restarts: r.restarts,
+    sessionId: r.sessionId,
+  };
 }
 
 /** null when the token works; otherwise a short reason. Network errors don't block the start. */
@@ -66,10 +87,16 @@ export async function runSupervisor(opts: { only?: string[]; fresh?: string[] } 
   if (process.platform === "win32") shim = ensureBunShim();
 
   const log = (m: string) => console.log(`${new Date().toLocaleTimeString()} ${m}`);
+  const startedAt = Date.now();
   const runners: WorkspaceRunner[] = [];
   const lastPlugin = new Map<string, string>();
+  const lastState = new Map<string, string>();
   let stopping = false;
+  let lockedDown = false;
+  let manager: ManagerHandle | undefined;
   const cleanups: (() => void)[] = [];
+  /** Post to #control if the manager bot is set up. mention = phone notification. */
+  const alert = (text: string, mention = false) => void manager?.notify(text, mention);
 
   const writeStatus = () => {
     const status = {
@@ -102,13 +129,28 @@ export async function runSupervisor(opts: { only?: string[]; fresh?: string[] } 
       log,
       onChange: (r) => {
         writeStatus();
+        if (stopping) return;
+        // Alerts for states a person has to look at.
+        if (r.state !== lastState.get(ws.name)) {
+          const prev = lastState.get(ws.name);
+          lastState.set(ws.name, r.state);
+          if (r.state === "failed") alert(`🔴 **${ws.name}** failed: ${r.detail}`, true);
+          if (r.state === "needs-trust") alert(`🔐 **${ws.name}** needs a one-time folder-trust answer on the PC: \`npm run launch -- ${ws.name}\``, true);
+          if (r.state === "restarting" && prev === "running" && !lockedDown) alert(`🟠 **${ws.name}** stopped unexpectedly and is restarting (${r.detail}).`);
+        }
         // Log the plugin state only when it actually changes (state changes like "stopped" also call onChange).
         const key = `${r.plugin}|${r.pluginDetail}`;
         if (key === lastPlugin.get(ws.name)) return;
+        const wasFailed = lastPlugin.get(ws.name)?.startsWith("failed");
         lastPlugin.set(ws.name, key);
-        if (stopping) return;
-        if (r.plugin === "connected") log(`[${ws.name}] 🟢 Discord plugin connected (#${ws.channelName})`);
-        if (r.plugin === "failed") log(`[${ws.name}] 🔴 Discord plugin failed: ${r.pluginDetail}`);
+        if (r.plugin === "connected") {
+          log(`[${ws.name}] 🟢 Discord plugin connected (#${ws.channelName})`);
+          if (wasFailed) alert(`🟢 **${ws.name}** bot is back online.`);
+        }
+        if (r.plugin === "failed") {
+          log(`[${ws.name}] 🔴 Discord plugin failed: ${r.pluginDetail}`);
+          alert(`🔴 **${ws.name}** Discord plugin failed: ${r.pluginDetail}`, true);
+        }
       },
     });
     runners.push(runner);
@@ -144,7 +186,7 @@ export async function runSupervisor(opts: { only?: string[]; fresh?: string[] } 
       if (!r || modeOf(latest) === modeOf(r.ws)) continue;
       r.ws = latest;
       writeStatus();
-      if (r.state === "needs-trust" || r.state === "failed" || r.state === "stopped") continue; // applies on next start
+      if (lockedDown || r.state === "needs-trust" || r.state === "failed" || r.state === "stopped") continue; // applies on next start
       log(`[${latest.name}] permission mode → ${modeOf(latest)}; restarting (conversation continues)`);
       r.restart();
     }
@@ -154,6 +196,53 @@ export async function runSupervisor(opts: { only?: string[]; fresh?: string[] } 
   writeStatus();
   for (const r of runners) log(`[${r.ws.name}] permission mode: ${modeOf(r.ws)}`);
   log(`Supervisor running ${runners.length} workspace(s). Press Ctrl+C to stop all.`);
+
+  // ---------- manager bot (#control) ----------
+  const controller: Controller = {
+    list: () => runners.map(toInfo),
+    interrupt: (name) => runners.find((r) => r.ws.name === name)?.interrupt() ?? false,
+    restart: (name, fresh) => {
+      const r = runners.find((x) => x.ws.name === name);
+      if (!r) return;
+      if (runners.every((x) => x.state === "stopped" || x === r)) lockedDown = false;
+      log(`[${name}] ${fresh ? "new conversation" : "restart"} requested from Discord`);
+      r.restart({ fresh });
+    },
+    setMode: (name, mode) => {
+      const reg = loadWorkspaces();
+      const w = reg.find((x) => x.name === name);
+      const r = runners.find((x) => x.ws.name === name);
+      if (!w || !r) return;
+      if (mode === "auto") delete w.permissionMode;
+      else w.permissionMode = mode as Workspace["permissionMode"];
+      saveWorkspaces(reg);
+      r.ws = w; // the mode watcher now sees no difference, so it won't restart a second time
+      log(`[${name}] permission mode → ${mode} (from Discord)`);
+      if (!lockedDown && r.state !== "stopped" && r.state !== "failed" && r.state !== "needs-trust") r.restart();
+      writeStatus();
+    },
+    logs: (name, lines) => runners.find((r) => r.ws.name === name)?.recentOutput(lines) ?? "",
+    lockdown: () => {
+      lockedDown = true;
+      const n = runners.filter((r) => r.state !== "stopped").length;
+      for (const r of runners) r.stop();
+      log(`🔒 LOCKDOWN from Discord: stopped ${n} workspace(s)`);
+      return n;
+    },
+    host: () => getHostInfo(startedAt),
+    lockedDown: () => lockedDown,
+  };
+
+  const mcfg = loadManager();
+  const mtoken = readManagerToken();
+  if (mcfg && mtoken) {
+    try {
+      manager = await startManager(mcfg, mtoken, controller, log);
+      alert(`🟢 **Supervisor online** on ${os.hostname()}\n${renderDashboard(runners.map(toInfo))}`);
+    } catch (e) {
+      log(`[manager] could not start: ${e instanceof Error ? e.message : e} (check the token: npm run add-manager)`);
+    }
+  } else log("Manager bot not set up (optional): npm run add-manager");
 
   const shutdown = () => {
     if (stopping) return;
@@ -165,10 +254,13 @@ export async function runSupervisor(opts: { only?: string[]; fresh?: string[] } 
     try {
       fs.rmSync(lockFile());
     } catch {}
-    setTimeout(() => {
+    const finish = () => {
       log("Stopped.");
       process.exit(0);
-    }, 500);
+    };
+    if (!manager) return void setTimeout(finish, 500);
+    // Tell #control, then leave (give Discord at most 2 s).
+    Promise.race([manager.notify("⚪ Supervisor stopped on the PC. Workspaces are offline.").then(() => manager!.close()), new Promise((r) => setTimeout(r, 2000))]).finally(finish);
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
