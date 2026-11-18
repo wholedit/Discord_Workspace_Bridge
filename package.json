@@ -9,11 +9,14 @@
     "remove": "node --use-system-ca --import tsx src/cli.ts remove",
     "launch": "node --use-system-ca --import tsx src/cli.ts launch",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test test/*.test.ts"
+    "test": "tsx --test test/*.test.ts",
+    "start": "node --use-system-ca --import tsx src/cli.ts start",
+    "status": "node --use-system-ca --import tsx src/cli.ts status"
   },
   "keywords": [],
   "type": "module",
   "dependencies": {
+    "@lydell/node-pty": "^1.2.0-beta.18",
     "discord.js": "^14.28.1"
   },
   "devDependencies": {

@@ -133,28 +133,7 @@ test("parses claude auth status and plugin list output", () => {
   assert.deepEqual(check.parsePluginList('[{"id":"other@x","enabled":true}]'), { installed: false, enabled: false });
 });
 
-// ---------- launch ----------
-
-test("launch script sets the state folder, clears a global token and resumes when asked", () => {
-  const s = launch.runScript(sample(), true);
-  assert.match(s, /set "DISCORD_STATE_DIR=.*workspaces[\\/]web"/);
-  assert.match(s, /set "DISCORD_ACCESS_MODE=static"/);
-  assert.match(s, /set "DISCORD_BOT_TOKEN="/);
-  assert.match(s, /set "NODE_USE_SYSTEM_CA=1"/);
-  assert.match(s, /set "BUN_INSPECT="/);
-  assert.doesNotMatch(s, /WSB_REAL_BUN/);
-  const withShim = launch.runScript(sample(), false, { dir: "D:/wsb/shim", realBun: "D:/bun/bun.exe" });
-  assert.ok(withShim.includes('set "WSB_REAL_BUN=D:/bun/bun.exe"'));
-  assert.ok(withShim.includes('set "PATH=D:/wsb/shim;%PATH%"'));
-  assert.ok(withShim.indexOf("PATH=") < withShim.indexOf("claude "), "PATH must be set before claude starts");
-  assert.match(launch.posixCommand(sample(), true), /env -u BUN_INSPECT .*claude --continue/);
-  const env = launch.cleanEnv({ BUN_INSPECT: "ws://x", bun_inspect_notify: "y", PATH: "p" });
-  assert.deepEqual(env, { PATH: "p" });
-  assert.match(launch.posixCommand(sample(), true), /NODE_USE_SYSTEM_CA=1/);
-  assert.match(s, /claude --continue --name web --channels plugin:discord@claude-plugins-official/);
-  assert.doesNotMatch(launch.runScript(sample(), false), /--continue/);
-  assert.match(launch.posixCommand(sample(), false), /^cd '.*projA' && env -u BUN_INSPECT .* DISCORD_STATE_DIR=/);
-});
+// launch / supervisor tests live in test/supervisor.test.ts
 
 test("network errors are explained, including HTTPS inspection", async () => {
   const err = (code: string) => Object.assign(new TypeError("fetch failed"), { cause: { code } });

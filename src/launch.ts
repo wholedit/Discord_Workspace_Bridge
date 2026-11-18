@@ -1,55 +1,42 @@
-// Start one interactive `claude --channels` per workspace.
-// M0: each runs in its own Windows Terminal tab so you can see it and answer the one-time folder-trust prompt.
-// (M1 replaces this with a supervisor that runs them without windows and restarts them.)
+// Visible mode: start workspaces in Windows Terminal tabs instead of the headless supervisor.
+// Use it to answer claude's one-time folder-trust question, or to watch a session while debugging.
+// It uses the same launch spec as the supervisor (session ID, hooks, environment), so a session continues
+// seamlessly when you switch between the two. Progress messages need the supervisor, so they are off here.
 
 import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { PLUGIN_ID, hasPreviousSession, stateDir, type Workspace } from "./workspaces.js";
+import { stateDir, type Workspace } from "./workspaces.js";
 import { ensureBunShim } from "./bunShim.js";
+import { buildSpec, cleanEnv, leakyNames, resolveClaude, type LaunchSpec, type Shim } from "./supervisor/spec.js";
 
-/** Bun debugger settings that must not leak into the plugin process. */
-export const BUN_DEBUG_VARS = ["BUN_INSPECT", "BUN_INSPECT_CONNECT_TO", "BUN_INSPECT_NOTIFY", "BUN_INSPECT_BRK", "BUN_INSPECT_WAIT"];
+const quoteArg = (a: string) => (/[\s"]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a);
 
-/** Copy of the environment without Bun debugger settings. */
-export function cleanEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-  const out = { ...env };
-  for (const k of Object.keys(out)) if (BUN_DEBUG_VARS.includes(k.toUpperCase())) delete out[k];
-  return out;
-}
-
-export function claudeArgs(ws: Workspace, resume: boolean): string[] {
-  return [...(resume ? ["--continue"] : []), "--name", ws.name, "--channels", `plugin:${PLUGIN_ID}`];
-}
-
-/** Windows batch file that sets the plugin's state folder and starts claude in the workspace folder. */
-export function runScript(ws: Workspace, resume: boolean, shim?: { dir: string; realBun: string }): string {
+/** Windows batch file for one workspace. It re-applies the spec's environment because Windows Terminal starts tabs with its own. */
+export function runScript(ws: Workspace, spec: LaunchSpec, claudeExe: string, clear: string[] = leakyNames()): string {
+  const set = (k: string, v: string) => `set "${k}=${v}"`;
+  const keep = ["DISCORD_STATE_DIR", "DISCORD_ACCESS_MODE", "NODE_USE_SYSTEM_CA", "MCP_TIMEOUT", "WSB_WORKSPACE", "WSB_EVENTS", "WSB_REAL_BUN"];
+  const pathKey = Object.keys(spec.env).find((k) => k.toUpperCase() === "PATH");
   return [
     "@echo off",
     `title ${ws.name}`,
-    `set "DISCORD_STATE_DIR=${stateDir(ws.name)}"`,
-    'set "DISCORD_ACCESS_MODE=static"',
-    // Trust the OS certificate store, so networks with HTTPS inspection (company/security software) work for the plugin's Bun runtime.
-    'set "NODE_USE_SYSTEM_CA=1"',
-    // A token set globally in the shell would override this workspace's .env, so clear it.
+    ...clear.map((k) => `set "${k}="`),
     'set "DISCORD_BOT_TOKEN="',
-    // Debugger variables inherited from some terminals (e.g. an app's built-in terminal) make the plugin's Bun
-    // try to open an inspector port and fail, so the plugin never connects.
-    ...BUN_DEBUG_VARS.map((v) => `set "${v}="`),
-    // claude itself hands BUN_INSPECT to the plugin, so the plugin's "bun" must be our wrapper (src/bunShim.ts).
-    ...(shim ? [`set "WSB_REAL_BUN=${shim.realBun}"`, `set "PATH=${shim.dir};%PATH%"`] : []),
-    `cd /d "${ws.folder}"`,
-    `claude ${claudeArgs(ws, resume).join(" ")}`,
+    ...keep.filter((k) => spec.env[k] !== undefined).map((k) => set(k, String(spec.env[k]))),
+    ...(spec.env.WSB_REAL_BUN && pathKey ? [set("PATH", String(spec.env[pathKey]).split(path.delimiter)[0] + ";%PATH%")] : []),
+    `cd /d "${spec.cwd}"`,
+    `"${claudeExe}" ${spec.args.map(quoteArg).join(" ")}`,
     "",
   ].join("\r\n");
 }
 
 /** Shell command for macOS/Linux users to run themselves (e.g. in tmux). */
-export function posixCommand(ws: Workspace, resume: boolean): string {
+export function posixCommand(spec: LaunchSpec, claudeExe = "claude"): string {
   const q = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
-  const unset = BUN_DEBUG_VARS.map((v) => `-u ${v}`).join(" ");
-  const vars = `DISCORD_STATE_DIR=${q(stateDir(ws.name))} DISCORD_ACCESS_MODE=static NODE_USE_SYSTEM_CA=1 DISCORD_BOT_TOKEN=`;
-  return `cd ${q(ws.folder)} && env ${unset} ${vars} claude ${claudeArgs(ws, resume).join(" ")}`;
+  const keep = ["DISCORD_STATE_DIR", "DISCORD_ACCESS_MODE", "NODE_USE_SYSTEM_CA", "MCP_TIMEOUT", "WSB_WORKSPACE", "WSB_EVENTS"];
+  const unset = [...new Set([...leakyNames(), "DISCORD_BOT_TOKEN", "BUN_INSPECT"])].map((k) => `-u ${k}`).join(" ");
+  const vars = keep.filter((k) => spec.env[k] !== undefined).map((k) => `${k}=${q(String(spec.env[k]))}`).join(" ");
+  return `cd ${q(spec.cwd)} && env ${unset} ${vars} ${claudeExe} ${spec.args.map(q).join(" ")}`;
 }
 
 export function launchAll(list: Workspace[], opts: { dryRun?: boolean; fresh?: string[] } = {}) {
@@ -57,26 +44,27 @@ export function launchAll(list: Workspace[], opts: { dryRun?: boolean; fresh?: s
     console.log("No workspaces yet. Add one with: npm run add");
     return;
   }
-  let shim: { dir: string; realBun: string } | undefined;
-  if (process.platform === "win32") {
-    try {
-      shim = ensureBunShim();
-    } catch (e) {
-      console.log(`✗ ${e instanceof Error ? e.message : e}`);
-      process.exitCode = 1;
-      return;
-    }
+  let shim: Shim | undefined;
+  let claudeExe = "claude";
+  try {
+    claudeExe = resolveClaude().file;
+    if (process.platform === "win32") shim = ensureBunShim();
+  } catch (e) {
+    console.log(`✗ ${e instanceof Error ? e.message : e}`);
+    process.exitCode = 1;
+    return;
   }
   for (const ws of list) {
-    const resume = !opts.fresh?.includes(ws.name) && hasPreviousSession(ws.folder);
+    const spec = buildSpec(ws, { fresh: opts.fresh?.includes(ws.name), shim });
+    const what = spec.resume ? `resume session ${spec.sessionId.slice(0, 8)}` : `new session ${spec.sessionId.slice(0, 8)}`;
     if (process.platform !== "win32") {
-      console.log(`\n# ${ws.name}\n${posixCommand(ws, resume)}`);
+      console.log(`\n# ${ws.name} (${what})\n${posixCommand(spec, claudeExe)}`);
       continue;
     }
     const script = path.join(stateDir(ws.name), "run.cmd");
-    fs.writeFileSync(script, runScript(ws, resume, shim));
+    fs.writeFileSync(script, runScript(ws, spec, claudeExe));
     const args = ["-w", "workspace-bridge", "new-tab", "--title", ws.name, "cmd", "/k", script];
-    console.log(`${ws.name.padEnd(12)} ${resume ? "continue last conversation" : "new conversation"}  →  #${ws.channelName}  (${ws.folder})`);
+    console.log(`${ws.name.padEnd(14)} ${what}  →  #${ws.channelName}  (${ws.folder})`);
     if (opts.dryRun) {
       console.log(`  wt ${args.join(" ")}`);
       continue;
@@ -85,5 +73,7 @@ export function launchAll(list: Workspace[], opts: { dryRun?: boolean; fresh?: s
   }
   if (process.platform !== "win32") console.log("\nRun each command in its own terminal (or tmux window).");
   else if (!opts.dryRun)
-    console.log("\nOpened in Windows Terminal. First launch of a folder asks you to trust it — answer that once in the tab, then everything works from your phone.");
+    console.log(
+      "\nOpened in Windows Terminal. Answer the folder-trust question in each new tab once.\nDon't run the supervisor (npm start) for the same workspace at the same time.",
+    );
 }

@@ -25,16 +25,29 @@ export class DiscordApiError extends Error {
   }
 }
 
-export type FetchLike = (url: string, init: { headers: Record<string, string> }) => Promise<{ ok: boolean; status: number; json(): Promise<any> }>;
+export type FetchLike = (
+  url: string,
+  init: { method?: string; headers: Record<string, string>; body?: string },
+) => Promise<{ ok: boolean; status: number; json(): Promise<any> }>;
 
 export class DiscordRest {
   constructor(private token: string, private fetchImpl: FetchLike = fetch as unknown as FetchLike) {}
 
   async get<T = any>(path: string): Promise<T> {
+    return this.request<T>("GET", path);
+  }
+
+  async request<T = any>(method: string, path: string, body?: unknown): Promise<T> {
     let res;
     try {
       res = await this.fetchImpl(API + path, {
-        headers: { Authorization: `Bot ${this.token}`, "User-Agent": "DiscordBot (workspace-bridge, 0.1)" },
+        method,
+        headers: {
+          Authorization: `Bot ${this.token}`,
+          "User-Agent": "DiscordBot (workspace-bridge, 0.1)",
+          ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+        },
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       });
     } catch (e) {
       throw new DiscordApiError(0, networkErrorMessage(e));
@@ -61,6 +74,13 @@ export class DiscordRest {
   }
   user(id: string) {
     return this.get<{ id: string; username: string; global_name?: string | null }>(`/users/${id}`);
+  }
+  /** Send a message without pinging anyone (progress updates must stay quiet). */
+  sendMessage(channelId: string, content: string) {
+    return this.request<{ id: string }>("POST", `/channels/${channelId}/messages`, { content, allowed_mentions: { parse: [] }, flags: 4096 /* SUPPRESS_NOTIFICATIONS */ });
+  }
+  editMessage(channelId: string, messageId: string, content: string) {
+    return this.request<{ id: string }>("PATCH", `/channels/${channelId}/messages/${messageId}`, { content, allowed_mentions: { parse: [] } });
   }
 }
 
