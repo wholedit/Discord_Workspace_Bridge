@@ -124,7 +124,7 @@ switch (cmd) {
     break;
   }
   default:
-    console.log(`workspace-bridge (M3)
+    console.log(`discord-workspace-bridge 0.1.0
 
   npm run setup                 open the setup page in your browser (recommended)
   npm run check                 check this PC is ready

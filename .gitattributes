@@ -1,0 +1,7 @@
+# Keep LF in the repository and in working copies (stops the LF/CRLF warnings on Windows).
+* text=auto eol=lf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.png binary
+*.jpg binary
+*.gif binary

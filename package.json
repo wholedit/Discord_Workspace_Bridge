@@ -1,7 +1,20 @@
 {
-  "name": "workspace-bridge",
-  "version": "1.0.0",
-  "description": "Control local Claude Code workspaces from Discord on your phone, one bot per workspace, using the official Discord channel plugin",
+  "name": "discord-workspace-bridge",
+  "version": "0.1.0",
+  "description": "Give tasks to Claude Code workspaces on your PC from Discord on your phone: one bot per workspace, using Anthropic's official Discord channel plugin",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wholedit/Discord_Workspace_Bridge.git"
+  },
+  "homepage": "https://github.com/wholedit/Discord_Workspace_Bridge#readme",
+  "keywords": [
+    "discord",
+    "claude-code",
+    "remote",
+    "workspace",
+    "bot"
+  ],
   "scripts": {
     "check": "node --use-system-ca --import tsx src/cli.ts check",
     "add": "node --use-system-ca --import tsx src/cli.ts add",
@@ -21,7 +34,6 @@
     "autostart": "node --use-system-ca --import tsx src/cli.ts autostart",
     "logs": "node --use-system-ca --import tsx src/cli.ts logs"
   },
-  "keywords": [],
   "type": "module",
   "dependencies": {
     "@lydell/node-pty": "^1.2.0-beta.18",
@@ -37,6 +49,9 @@
     "node": ">=22.15"
   },
   "bin": {
-    "workspace-bridge": "src/cli.ts"
+    "discord-workspace-bridge": "src/cli.ts"
+  },
+  "allowScripts": {
+    "esbuild": false
   }
 }
