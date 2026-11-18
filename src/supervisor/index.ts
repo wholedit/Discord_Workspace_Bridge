@@ -177,6 +177,7 @@ export function printStatus() {
           : w.plugin === "failed"
             ? `plugin failed: ${w.pluginDetail}`
             : "plugin starting…";
-    console.log(`${icon[w.state] ?? "?"} ${w.name.padEnd(14)} ${w.state.padEnd(11)} #${String(w.channel).padEnd(14)} ${plugin}  restarts ${w.restarts}`);
+    const pid = w.pid ? `pid ${w.pid}` : "";
+    console.log(`${icon[w.state] ?? "?"} ${w.name.padEnd(14)} ${w.state.padEnd(11)} #${String(w.channel).padEnd(14)} ${pid.padEnd(10)} ${plugin}  restarts ${w.restarts}`);
   }
 }
