@@ -72,7 +72,8 @@ test("registry upsert and remove", async () => {
 });
 
 test("claude project folder naming and previous-session detection", () => {
-  assert.equal(path.basename(ws.claudeProjectDir("C:\\projects\\bridge")), "C--projects-bridge");
+  if (process.platform === "win32") assert.equal(path.basename(ws.claudeProjectDir("C:\\projects\\bridge")), "C--projects-bridge");
+  else assert.equal(path.basename(ws.claudeProjectDir("/home/me/my_proj")), "-home-me-my-proj");
   const claudeHome = path.join(tmp, "claude");
   assert.equal(ws.hasPreviousSession(folderA, claudeHome), false);
   const proj = ws.claudeProjectDir(folderA, claudeHome);

@@ -104,7 +104,7 @@ test("auto-start task: sign-in trigger, no time limit, no admin, runs start-bg",
   assert.match(x, /<ExecutionTimeLimit>PT0S<\/ExecutionTimeLimit>/);
   assert.match(x, /<DisallowStartIfOnBatteries>false/);
   assert.match(x, /<Command>C:\\Program Files\\nodejs\\node.exe<\/Command>/);
-  assert.match(x, /<Arguments>--use-system-ca --import tsx src\\cli.ts start-bg<\/Arguments>/);
+  assert.ok(x.includes(`<Arguments>--use-system-ca --import tsx ${path.join("src", "cli.ts")} start-bg</Arguments>`));
   assert.match(x, /<WorkingDirectory>C:\\a &amp; b\\repo<\/WorkingDirectory>/); // XML-escaped
   assert.deepEqual(supervisorCommand("start", "node").slice(-1), ["start"]);
 });

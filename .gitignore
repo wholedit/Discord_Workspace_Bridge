@@ -6,3 +6,6 @@ node_modules/
 .claude/settings.local.json
 
 # Bot tokens and workspace state live outside the repo, in ~/.workspace-bridge/
+
+# Personal drafts, not part of the project
+blog/

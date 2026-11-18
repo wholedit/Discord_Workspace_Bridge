@@ -76,7 +76,7 @@ test("launch spec: args, environment, hook settings", () => {
   assert.deepEqual(again.args.slice(0, 2), ["--resume", fresh.sessionId]);
 });
 
-test("visible-mode script re-applies the environment and puts the bun wrapper first", () => {
+test("visible-mode script re-applies the environment and puts the bun wrapper first", { skip: process.platform !== "win32" && "Windows batch script" }, () => {
   const s = spec.buildSpec(ws, { fresh: true, shim: { dir: "D:\\shim", realBun: "D:\\bun.exe" }, baseEnv: { Path: "C:\\x" }, claudeHome });
   const script = launch.runScript(ws, s, "C:\\bin\\claude.exe", ["BUN_INSPECT", "CLAUDECODE"]);
   assert.ok(script.includes('set "BUN_INSPECT="') && script.includes('set "CLAUDECODE="') && script.includes('set "DISCORD_BOT_TOKEN="'));
