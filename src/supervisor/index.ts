@@ -67,6 +67,8 @@ export async function runSupervisor(opts: { only?: string[]; fresh?: string[] } 
 
   const log = (m: string) => console.log(`${new Date().toLocaleTimeString()} ${m}`);
   const runners: WorkspaceRunner[] = [];
+  const lastPlugin = new Map<string, string>();
+  let stopping = false;
   const cleanups: (() => void)[] = [];
 
   const writeStatus = () => {
@@ -99,6 +101,11 @@ export async function runSupervisor(opts: { only?: string[]; fresh?: string[] } 
       log,
       onChange: (r) => {
         writeStatus();
+        // Log the plugin state only when it actually changes (state changes like "stopped" also call onChange).
+        const key = `${r.plugin}|${r.pluginDetail}`;
+        if (key === lastPlugin.get(ws.name)) return;
+        lastPlugin.set(ws.name, key);
+        if (stopping) return;
         if (r.plugin === "connected") log(`[${ws.name}] 🟢 Discord plugin connected (#${ws.channelName})`);
         if (r.plugin === "failed") log(`[${ws.name}] 🔴 Discord plugin failed: ${r.pluginDetail}`);
       },
@@ -132,18 +139,20 @@ export async function runSupervisor(opts: { only?: string[]; fresh?: string[] } 
   writeStatus();
   log(`Supervisor running ${runners.length} workspace(s). Press Ctrl+C to stop all.`);
 
-  let stopping = false;
   const shutdown = () => {
     if (stopping) return;
     stopping = true;
-    log("Stopping all workspaces…");
+    log("Stopping all workspaces… (wait for \"Stopped.\")");
     for (const r of runners) r.stop();
     for (const c of cleanups) c();
     writeStatus();
     try {
       fs.rmSync(lockFile());
     } catch {}
-    setTimeout(() => process.exit(0), 500);
+    setTimeout(() => {
+      log("Stopped.");
+      process.exit(0);
+    }, 500);
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
