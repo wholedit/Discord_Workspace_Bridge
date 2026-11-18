@@ -16,7 +16,7 @@ export type WorkspaceInfo = {
   sessionId?: string;
 };
 
-export type HostInfo = { uptimeSec: number; supervisorUptimeSec: number; cpuPercent: number; memUsedGb: number; memTotalGb: number; diskFreeGb?: number; diskTotalGb?: number; hostname: string };
+export type HostInfo = { uptimeSec: number; supervisorUptimeSec: number; cpuPercent: number; memUsedGb: number; memTotalGb: number; diskFreeGb?: number; diskTotalGb?: number; hostname: string; awake?: boolean };
 
 /** What the manager bot can ask the supervisor to do. */
 export interface Controller {
@@ -68,7 +68,7 @@ function pluginText(w: WorkspaceInfo): string {
 }
 
 export function renderDashboard(list: WorkspaceInfo[], now = Date.now(), lockedDown = false): string {
-  if (!list.length) return "No workspaces. Add one on the PC with `npm run add`.";
+  if (!list.length) return "No workspaces. Add one on the PC with `npm run setup`.";
   const running = list.filter((w) => w.state === "running").length;
   const lines = list.map((w) => {
     const up = w.state === "running" && w.startedAt ? ` · up ${duration((now - w.startedAt) / 1000)}` : "";
@@ -92,7 +92,8 @@ export function renderStatus(w: WorkspaceInfo, now = Date.now()): string {
 
 export function renderHost(h: HostInfo): string {
   const disk = h.diskTotalGb ? `\n💽 disk free ${h.diskFreeGb!.toFixed(0)} / ${h.diskTotalGb.toFixed(0)} GB` : "";
-  return `🏓 **${h.hostname}** is online\n⏱️ PC up ${duration(h.uptimeSec)} · supervisor up ${duration(h.supervisorUptimeSec)}\n🧠 CPU ${h.cpuPercent.toFixed(0)}% · memory ${h.memUsedGb.toFixed(1)} / ${h.memTotalGb.toFixed(1)} GB${disk}`;
+  const awake = h.awake === undefined ? "" : `\n☕ sleep prevention ${h.awake ? "on" : "off"}`;
+  return `🏓 **${h.hostname}** is online\n⏱️ PC up ${duration(h.uptimeSec)} · supervisor up ${duration(h.supervisorUptimeSec)}\n🧠 CPU ${h.cpuPercent.toFixed(0)}% · memory ${h.memUsedGb.toFixed(1)} / ${h.memTotalGb.toFixed(1)} GB${disk}${awake}`;
 }
 
 /** Choices for the ws option, filtered by what the user typed. */

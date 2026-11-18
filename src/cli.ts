@@ -63,15 +63,80 @@ switch (cmd) {
     launchAll(names.length ? all.filter((w) => names.includes(w.name)) : all, { dryRun: args.includes("--dry-run"), fresh });
     break;
   }
+  case "setup": {
+    const { setupCommand } = await import("./setup/server.js");
+    await setupCommand();
+    break;
+  }
+  case "stop": {
+    const { stopSupervisor, supervisorPid } = await import("./supervisor/control.js");
+    if (!supervisorPid()) {
+      console.log("The supervisor is not running.");
+      break;
+    }
+    console.log("Stopping the supervisor…");
+    const ok = await stopSupervisor();
+    console.log(ok ? "✓ Stopped." : "✗ It did not stop within 30 seconds. Check: npm run logs");
+    process.exitCode = ok ? 0 : 1;
+    break;
+  }
+  case "start-bg": {
+    const { startInBackground, waitForSupervisor } = await import("./autostart.js");
+    const r = startInBackground();
+    console.log(`${r.ok ? "✓" : "✗"} ${r.detail}`);
+    if (r.ok && !r.detail.startsWith("Already")) {
+      const pid = await waitForSupervisor();
+      console.log(pid ? `  running (pid ${pid}). See it with: npm run status` : "  it has not started yet. Check: npm run logs");
+    }
+    break;
+  }
+  case "trust": {
+    const ws = loadWorkspaces().find((w) => w.name === args[0]);
+    if (!ws) {
+      console.log(args[0] ? `No workspace named "${args[0]}".` : "Usage: npm run trust -- <name>");
+      process.exitCode = 1;
+      break;
+    }
+    const { trustCommand } = await import("./trust.js");
+    await trustCommand(ws);
+    break;
+  }
+  case "autostart": {
+    const { autostartStatus, disableAutostart, enableAutostart } = await import("./autostart.js");
+    const sub = args[0] ?? "status";
+    if (sub === "on" || sub === "off") {
+      const r = sub === "on" ? enableAutostart() : disableAutostart();
+      console.log(`${r.ok ? "✓" : "✗"} ${r.detail}`);
+      process.exitCode = r.ok ? 0 : 1;
+    } else console.log(`Auto-start at sign-in: ${autostartStatus().detail}\n  turn on/off: npm run autostart -- on | off`);
+    break;
+  }
+  case "logs": {
+    const { logFile } = await import("./supervisor/control.js");
+    const fs = await import("node:fs");
+    try {
+      const lines = fs.readFileSync(logFile(), "utf8").split(/\r?\n/);
+      console.log(lines.slice(-Number(args[0] ?? 60)).join("\n"));
+      console.log(`\n(${logFile()})`);
+    } catch {
+      console.log("No background log yet. It is written when the supervisor runs in the background (setup page, start:bg, auto-start).");
+    }
+    break;
+  }
   default:
-    console.log(`workspace-bridge (M1)
+    console.log(`workspace-bridge (M3)
 
+  npm run setup                 open the setup page in your browser (recommended)
   npm run check                 check this PC is ready
   npm run add                   add a workspace (bot + channel + folder)
   npm run list                  list workspaces
   npm run remove -- <name>      remove a workspace
   npm start [-- names]          run workspaces in the background (no windows), restart them, show progress
          -- --fresh=web         start these with a new conversation
+  npm run start:bg              same, in the background with no window (log: npm run logs)
+  npm run stop                  stop the supervisor (terminal or background)
+  npm run autostart -- on|off   start it automatically when you sign in to Windows
+  npm run trust -- <name>       answer claude's one-time folder-trust question for a workspace
   npm run status                show what the supervisor is doing
   npm run mode -- <name> <mode> permission mode: auto (default), manual, acceptEdits, plan
   npm run add-manager           set up the manager bot (#control: /dashboard, /restart, /stop, alerts)

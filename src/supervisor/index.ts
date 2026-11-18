@@ -1,11 +1,14 @@
 // The supervisor: runs every workspace's claude without windows, restarts them, shows progress in Discord,
-// and writes status.json (read by `npm run status` now and by the manager bot in M2).
+// runs the manager bot, keeps the PC awake, and writes status.json (read by `npm run status` and the setup page).
+// Changes made while it runs (setup page, npm run add/remove/mode) are picked up within a few seconds.
 
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { spawn, type ChildProcess } from "node:child_process";
 import { DiscordApiError, DiscordRest } from "../discordApi.js";
 import { ensureBunShim } from "../bunShim.js";
-import os from "node:os";
+import { awakeExe } from "../winTools.js";
 import { homeDir, loadWorkspaces, modeOf, saveWorkspaces, stateDir, type Workspace } from "../workspaces.js";
 import { loadManager, readManagerToken } from "../manager/config.js";
 import { startManager, type ManagerHandle } from "../manager/bot.js";
@@ -14,9 +17,9 @@ import { getHostInfo } from "../manager/host.js";
 import { WorkspaceRunner } from "./runner.js";
 import { ProgressReporter, tailEvents } from "./progress.js";
 import { eventsFile, resolveClaude, type Shim } from "./spec.js";
+import { isAlive, lockFile, readStatus, statusFile, takeRequests } from "./control.js";
 
-export const statusFile = () => path.join(homeDir(), "status.json");
-const lockFile = () => path.join(homeDir(), "supervisor.pid");
+export { statusFile };
 
 function readToken(ws: Workspace): string | null {
   try {
@@ -55,29 +58,35 @@ async function checkToken(token: string): Promise<string | null> {
 
 /** Refuse to run twice: two supervisors would start every workspace twice. */
 function takeLock() {
+  let pid = 0;
   try {
-    const pid = Number(fs.readFileSync(lockFile(), "utf8"));
-    if (pid && pid !== process.pid) {
-      try {
-        process.kill(pid, 0);
-        throw new Error(`The supervisor is already running (pid ${pid}). Stop it first, or delete ${lockFile()} if that process is gone.`);
-      } catch (e) {
-        if ((e as NodeJS.ErrnoException).code !== "ESRCH" && (e as NodeJS.ErrnoException).code !== "EPERM") throw e;
-        if ((e as NodeJS.ErrnoException).code === "EPERM") throw new Error(`The supervisor is already running (pid ${pid}).`);
-      }
-    }
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-  }
+    pid = Number(fs.readFileSync(lockFile(), "utf8"));
+  } catch {}
+  if (pid && pid !== process.pid && isAlive(pid)) throw new Error(`The supervisor is already running (pid ${pid}). Stop it first with: npm run stop`);
   fs.mkdirSync(homeDir(), { recursive: true });
   fs.writeFileSync(lockFile(), String(process.pid));
 }
 
+/** Windows: keep the PC from sleeping while we run (the screen may still turn off). WSB_ALLOW_SLEEP=1 turns this off. */
+function keepAwake(log: (m: string) => void): ChildProcess | null {
+  if (process.platform !== "win32" || process.env.WSB_ALLOW_SLEEP === "1") return null;
+  try {
+    const child = spawn(awakeExe(), [String(process.pid)], { stdio: "ignore", windowsHide: true });
+    child.on("error", (e) => log(`sleep prevention failed: ${e.message}`));
+    return child;
+  } catch (e) {
+    log(`sleep prevention is off: ${e instanceof Error ? e.message : e}`);
+    return null;
+  }
+}
+
+const sameWorkspace = (a: Workspace, b: Workspace) => a.botId === b.botId && a.channelId === b.channelId && a.folder === b.folder && a.userId === b.userId;
+
 export async function runSupervisor(opts: { only?: string[]; fresh?: string[] } = {}) {
+  const wanted = (w: Workspace) => !opts.only?.length || opts.only.includes(w.name);
   const all = loadWorkspaces();
-  const list = opts.only?.length ? all.filter((w) => opts.only!.includes(w.name)) : all;
-  if (!list.length) {
-    console.log(all.length ? `No workspace named ${opts.only!.join(", ")}.` : "No workspaces yet. Add one with: npm run add");
+  if (opts.only?.length && !all.some(wanted)) {
+    console.log(`No workspace named ${opts.only.join(", ")}.`);
     return;
   }
 
@@ -89,19 +98,27 @@ export async function runSupervisor(opts: { only?: string[]; fresh?: string[] } 
   const log = (m: string) => console.log(`${new Date().toLocaleTimeString()} ${m}`);
   const startedAt = Date.now();
   const runners: WorkspaceRunner[] = [];
+  const tokens = new Map<string, string | null>();
+  const perRunnerCleanup = new Map<WorkspaceRunner, (() => void)[]>();
   const lastPlugin = new Map<string, string>();
   const lastState = new Map<string, string>();
   let stopping = false;
   let lockedDown = false;
   let manager: ManagerHandle | undefined;
+  let managerKey = "";
   const cleanups: (() => void)[] = [];
   /** Post to #control if the manager bot is set up. mention = phone notification. */
   const alert = (text: string, mention = false) => void manager?.notify(text, mention);
+  const awake = keepAwake(log);
+  const isAwake = () => !!awake && awake.exitCode === null && !awake.killed;
+  if (awake) log("☕ Sleep prevention on while the supervisor runs (the screen can still turn off).");
 
   const writeStatus = () => {
     const status = {
       supervisorPid: process.pid,
       updatedAt: new Date().toISOString(),
+      awake: isAwake(),
+      manager: manager ? "online" : managerKey ? "error" : "not set up",
       workspaces: runners.map((r) => ({
         name: r.ws.name,
         channel: r.ws.channelName,
@@ -122,20 +139,20 @@ export async function runSupervisor(opts: { only?: string[]; fresh?: string[] } 
     } catch {}
   };
 
-  for (const ws of list) {
+  async function addRunner(ws: Workspace, fresh = false) {
     const runner = new WorkspaceRunner(ws, {
       claude,
       shim,
       log,
       onChange: (r) => {
         writeStatus();
-        if (stopping) return;
+        if (stopping || !runners.includes(r)) return;
         // Alerts for states a person has to look at.
         if (r.state !== lastState.get(ws.name)) {
           const prev = lastState.get(ws.name);
           lastState.set(ws.name, r.state);
           if (r.state === "failed") alert(`🔴 **${ws.name}** failed: ${r.detail}`, true);
-          if (r.state === "needs-trust") alert(`🔐 **${ws.name}** needs a one-time folder-trust answer on the PC: \`npm run launch -- ${ws.name}\``, true);
+          if (r.state === "needs-trust") alert(`🔐 **${ws.name}** needs a one-time folder-trust answer on the PC: \`npm run trust -- ${ws.name}\` (or the setup page)`, true);
           if (r.state === "restarting" && prev === "running" && !lockedDown) alert(`🟠 **${ws.name}** stopped unexpectedly and is restarting (${r.detail}).`);
         }
         // Log the plugin state only when it actually changes (state changes like "stopped" also call onChange).
@@ -154,8 +171,11 @@ export async function runSupervisor(opts: { only?: string[]; fresh?: string[] } 
       },
     });
     runners.push(runner);
+    const mine: (() => void)[] = [];
+    perRunnerCleanup.set(runner, mine);
 
     const token = readToken(ws);
+    tokens.set(ws.name, token);
     if (token) {
       const rest = new DiscordRest(token);
       const reporter = new ProgressReporter(
@@ -167,35 +187,38 @@ export async function runSupervisor(opts: { only?: string[]; fresh?: string[] } 
       );
       fs.writeFileSync(eventsFile(ws), ""); // start each run with an empty event log
       const stopTail = tailEvents(eventsFile(ws), (ev) => reporter.handle(ev));
-      cleanups.push(stopTail, () => reporter.close());
+      mine.push(stopTail, () => reporter.close());
     } else log(`[${ws.name}] no bot token found; progress messages are off`);
 
+    log(`[${ws.name}] permission mode: ${modeOf(ws)}`);
     // A reset or deleted token makes the plugin exit right after connecting, and nothing else would tell you.
     const tokenProblem = token ? await checkToken(token) : "no bot token saved";
     if (tokenProblem) {
-      runner.markFailed(`${tokenProblem} — re-register the bot with: npm run add`);
-      continue;
+      runner.markFailed(`${tokenProblem} — re-register the bot with: npm run setup`);
+      return;
     }
-    runner.start({ fresh: opts.fresh?.includes(ws.name) });
+    if (lockedDown) runner.markFailed("locked down — use /restart to start it");
+    else runner.start({ fresh });
   }
 
-  // Apply permission-mode changes made with `npm run mode` while we run: restart just that workspace.
-  const watchModes = setInterval(() => {
-    for (const latest of loadWorkspaces()) {
-      const r = runners.find((x) => x.ws.name === latest.name);
-      if (!r || modeOf(latest) === modeOf(r.ws)) continue;
-      r.ws = latest;
-      writeStatus();
-      if (lockedDown || r.state === "needs-trust" || r.state === "failed" || r.state === "stopped") continue; // applies on next start
-      log(`[${latest.name}] permission mode → ${modeOf(latest)}; restarting (conversation continues)`);
-      r.restart();
-    }
-  }, 3000);
-  cleanups.push(() => clearInterval(watchModes));
+  function removeRunner(r: WorkspaceRunner) {
+    runners.splice(runners.indexOf(r), 1);
+    r.stop();
+    for (const c of perRunnerCleanup.get(r) ?? []) c();
+    perRunnerCleanup.delete(r);
+    lastState.delete(r.ws.name);
+    lastPlugin.delete(r.ws.name);
+    tokens.delete(r.ws.name);
+    writeStatus();
+  }
 
+  for (const ws of all.filter(wanted)) await addRunner(ws, opts.fresh?.includes(ws.name));
   writeStatus();
-  for (const r of runners) log(`[${r.ws.name}] permission mode: ${modeOf(r.ws)}`);
-  log(`Supervisor running ${runners.length} workspace(s). Press Ctrl+C to stop all.`);
+  log(
+    runners.length
+      ? `Supervisor running ${runners.length} workspace(s). Press Ctrl+C (or npm run stop) to stop all.`
+      : "Supervisor running with no workspaces yet. Add one with npm run setup; it starts here automatically.",
+  );
 
   // ---------- manager bot (#control) ----------
   const controller: Controller = {
@@ -204,8 +227,8 @@ export async function runSupervisor(opts: { only?: string[]; fresh?: string[] } 
     restart: (name, fresh) => {
       const r = runners.find((x) => x.ws.name === name);
       if (!r) return;
-      if (runners.every((x) => x.state === "stopped" || x === r)) lockedDown = false;
-      log(`[${name}] ${fresh ? "new conversation" : "restart"} requested from Discord`);
+      if (runners.every((x) => x.state === "stopped" || x.state === "failed" || x === r)) lockedDown = false;
+      log(`[${name}] ${fresh ? "new conversation" : "restart"} requested`);
       r.restart({ fresh });
     },
     setMode: (name, mode) => {
@@ -216,7 +239,7 @@ export async function runSupervisor(opts: { only?: string[]; fresh?: string[] } 
       if (mode === "auto") delete w.permissionMode;
       else w.permissionMode = mode as Workspace["permissionMode"];
       saveWorkspaces(reg);
-      r.ws = w; // the mode watcher now sees no difference, so it won't restart a second time
+      r.ws = w; // the watcher now sees no difference, so it won't restart a second time
       log(`[${name}] permission mode → ${mode} (from Discord)`);
       if (!lockedDown && r.state !== "stopped" && r.state !== "failed" && r.state !== "needs-trust") r.restart();
       writeStatus();
@@ -229,30 +252,101 @@ export async function runSupervisor(opts: { only?: string[]; fresh?: string[] } 
       log(`🔒 LOCKDOWN from Discord: stopped ${n} workspace(s)`);
       return n;
     },
-    host: () => getHostInfo(startedAt),
+    host: async () => ({ ...(await getHostInfo(startedAt)), ...(process.platform === "win32" ? { awake: isAwake() } : {}) }),
     lockedDown: () => lockedDown,
   };
 
-  const mcfg = loadManager();
-  const mtoken = readManagerToken();
-  if (mcfg && mtoken) {
+  /** Start, restart or stop the manager bot to match manager.json (it can be set up while we run). */
+  async function syncManager(first: boolean) {
+    const mcfg = loadManager();
+    const mtoken = readManagerToken();
+    const key = mcfg && mtoken ? `${mcfg.botId}|${mcfg.channelId}|${mcfg.ownerId}|${mtoken}` : "";
+    if (key === managerKey) return;
+    managerKey = key;
+    if (manager) {
+      await manager.close().catch(() => {});
+      manager = undefined;
+    }
+    if (!key) {
+      if (first) log("Manager bot not set up (optional): npm run setup");
+      writeStatus();
+      return;
+    }
     try {
-      manager = await startManager(mcfg, mtoken, controller, log);
+      manager = await startManager(mcfg!, mtoken!, controller, log);
       alert(`🟢 **Supervisor online** on ${os.hostname()}\n${renderDashboard(runners.map(toInfo))}`);
     } catch (e) {
-      log(`[manager] could not start: ${e instanceof Error ? e.message : e} (check the token: npm run add-manager)`);
+      log(`[manager] could not start: ${e instanceof Error ? e.message : e} (re-register it with: npm run setup)`);
     }
-  } else log("Manager bot not set up (optional): npm run add-manager");
+    writeStatus();
+  }
+  await syncManager(true);
 
-  const shutdown = () => {
+  // Every few seconds: apply changes made while we run and pick up requests (npm run stop / trust, setup page).
+  let syncing = false;
+  const sync = async () => {
+    if (syncing || stopping) return;
+    syncing = true;
+    try {
+      for (const req of takeRequests()) {
+        if (req.kind === "stop") {
+          log("Stop requested (npm run stop or the setup page).");
+          shutdown();
+          return;
+        }
+        controller.restart(req.name, req.fresh);
+      }
+      const latest = loadWorkspaces().filter(wanted);
+      for (const r of [...runners]) {
+        if (latest.some((w) => w.name === r.ws.name)) continue;
+        log(`[${r.ws.name}] removed from the workspace list; stopping it`);
+        alert(`➖ **${r.ws.name}** was removed on the PC.`);
+        removeRunner(r);
+      }
+      for (const w of latest) {
+        const r = runners.find((x) => x.ws.name === w.name);
+        if (!r) {
+          log(`[${w.name}] new workspace (#${w.channelName}); starting it`);
+          alert(`➕ **${w.name}** was added on the PC (#${w.channelName}).`);
+          await addRunner(w);
+          continue;
+        }
+        if (!sameWorkspace(r.ws, w) || readToken(w) !== tokens.get(w.name)) {
+          log(`[${w.name}] settings changed on the PC; restarting it with the new settings`);
+          removeRunner(r);
+          await new Promise((res) => setTimeout(res, 3000)); // let the old process exit first
+          await addRunner(w);
+          continue;
+        }
+        if (modeOf(w) === modeOf(r.ws)) continue;
+        r.ws = w;
+        writeStatus();
+        if (lockedDown || r.state === "needs-trust" || r.state === "failed" || r.state === "stopped") continue; // applies on next start
+        log(`[${w.name}] permission mode → ${modeOf(w)}; restarting (conversation continues)`);
+        r.restart();
+      }
+      await syncManager(false);
+    } catch (e) {
+      log(`watcher error: ${e instanceof Error ? e.message : e}`);
+    } finally {
+      syncing = false;
+    }
+  };
+  takeRequests(); // ignore requests left over from before we started
+  const watcher = setInterval(sync, 3000);
+  cleanups.push(() => clearInterval(watcher));
+
+  function shutdown() {
     if (stopping) return;
     stopping = true;
-    log("Stopping all workspaces… (wait for \"Stopped.\")");
+    log('Stopping all workspaces… (wait for "Stopped.")');
     for (const r of runners) r.stop();
+    for (const list of perRunnerCleanup.values()) for (const c of list) c();
     for (const c of cleanups) c();
+    awake?.kill();
     writeStatus();
     try {
-      fs.rmSync(lockFile());
+      if (Number(fs.readFileSync(lockFile(), "utf8")) === process.pid) fs.rmSync(lockFile());
     } catch {}
     const finish = () => {
       log("Stopped.");
@@ -261,7 +355,7 @@ export async function runSupervisor(opts: { only?: string[]; fresh?: string[] } 
     if (!manager) return void setTimeout(finish, 500);
     // Tell #control, then leave (give Discord at most 2 s).
     Promise.race([manager.notify("⚪ Supervisor stopped on the PC. Workspaces are offline.").then(() => manager!.close()), new Promise((r) => setTimeout(r, 2000))]).finally(finish);
-  };
+  }
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
   process.on("SIGBREAK", shutdown); // Windows Ctrl+Break / console close
@@ -269,21 +363,14 @@ export async function runSupervisor(opts: { only?: string[]; fresh?: string[] } 
 
 /** For `npm run status`: print what the running supervisor last reported. */
 export function printStatus() {
-  let s: { supervisorPid: number; updatedAt: string; workspaces: any[] };
-  try {
-    s = JSON.parse(fs.readFileSync(statusFile(), "utf8"));
-  } catch {
+  const s = readStatus();
+  if (!s) {
     console.log("No status yet. Start the supervisor with: npm start");
     return;
   }
-  let alive = false;
-  try {
-    process.kill(s.supervisorPid, 0);
-    alive = true;
-  } catch (e) {
-    alive = (e as NodeJS.ErrnoException).code === "EPERM";
-  }
-  console.log(`Supervisor ${alive ? `running (pid ${s.supervisorPid})` : "NOT running"} · updated ${new Date(s.updatedAt).toLocaleString()}\n`);
+  const alive = isAlive(s.supervisorPid);
+  const awake = alive && s.awake !== undefined ? ` · sleep prevention ${s.awake ? "on" : "off"}` : "";
+  console.log(`Supervisor ${alive ? `running (pid ${s.supervisorPid})` : "NOT running"} · updated ${new Date(s.updatedAt).toLocaleString()}${awake}\n`);
   const icon: Record<string, string> = { running: "🟢", starting: "🟡", restarting: "🟠", "needs-trust": "🔐", stopped: "⚪", failed: "🔴" };
   for (const w of s.workspaces) {
     const plugin =

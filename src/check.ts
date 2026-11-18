@@ -1,22 +1,30 @@
 // Environment check: everything the official Discord channel plugin needs on this PC.
 // Reads only status output from the claude CLI (never credentials).
 
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { PLUGIN_ID } from "./workspaces.js";
 import { pingDiscord } from "./discordApi.js";
 import { cleanEnv } from "./supervisor/spec.js";
 
 export type CheckResult = { name: string; ok: boolean; detail: string; fix?: string };
 
-function run(cmd: string, args: string[]): { ok: boolean; out: string } {
+/** Async so the setup page's server stays responsive while the checks run. */
+function run(cmd: string, args: string[]): Promise<{ ok: boolean; out: string }> {
   // On Windows, go through the shell so .cmd/.exe shims on PATH resolve. Args are fixed strings, never user input.
   // cleanEnv: a debugger variable inherited from the Claude app's terminal makes claude itself fail to start.
   const env = cleanEnv();
-  const r =
-    process.platform === "win32"
-      ? spawnSync([cmd, ...args].join(" "), { encoding: "utf8", shell: true, timeout: 60_000, env })
-      : spawnSync(cmd, args, { encoding: "utf8", timeout: 60_000, env });
-  return { ok: r.status === 0, out: (r.stdout ?? "") + (r.stderr ?? "") };
+  return new Promise((resolve) => {
+    const p =
+      process.platform === "win32"
+        ? spawn([cmd, ...args].join(" "), { shell: true, env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] })
+        : spawn(cmd, args, { env, stdio: ["ignore", "pipe", "pipe"] }); // stdin closed: claude waits for input on an open pipe
+    let out = "";
+    p.stdout?.on("data", (d) => (out += d));
+    p.stderr?.on("data", (d) => (out += d));
+    const timer = setTimeout(() => p.kill(), 60_000);
+    p.on("error", () => (clearTimeout(timer), resolve({ ok: false, out })));
+    p.on("close", (code) => (clearTimeout(timer), resolve({ ok: code === 0, out })));
+  });
 }
 
 /** Parse `claude auth status` JSON. Exported for tests. */
@@ -42,6 +50,14 @@ export function parsePluginList(out: string, id = PLUGIN_ID): { installed: boole
 
 export async function runChecks(): Promise<CheckResult[]> {
   const results: CheckResult[] = [];
+  // Start the slow commands together (each claude call can take several seconds).
+  const pending = {
+    ver: run("claude", ["--version"]),
+    auth: run("claude", ["auth", "status"]),
+    bun: run("bun", ["--version"]),
+    plugin: run("claude", ["plugin", "list", "--json"]),
+    wt: process.platform === "win32" ? run("where", ["wt"]) : Promise.resolve({ ok: true, out: "" }),
+  };
 
   const [major, minor] = process.versions.node.split(".").map(Number);
   results.push({
@@ -54,7 +70,7 @@ export async function runChecks(): Promise<CheckResult[]> {
   const net = await pingDiscord();
   results.push({ name: "Discord reachable over HTTPS", ok: net.ok, detail: net.ok ? net.detail : "failed", fix: net.ok ? undefined : net.detail });
 
-  const ver = run("claude", ["--version"]);
+  const ver = (await pending.ver);
   results.push({
     name: "Claude Code installed",
     ok: ver.ok,
@@ -63,7 +79,7 @@ export async function runChecks(): Promise<CheckResult[]> {
   });
   if (!ver.ok) return results;
 
-  const auth = parseAuthStatus(run("claude", ["auth", "status"]).out);
+  const auth = parseAuthStatus((await pending.auth).out);
   results.push({
     name: "Signed in to Claude",
     ok: auth.loggedIn,
@@ -71,7 +87,7 @@ export async function runChecks(): Promise<CheckResult[]> {
     fix: "Run `claude` once in a terminal and sign in with your Claude account (/login).",
   });
 
-  const bun = run("bun", ["--version"]);
+  const bun = (await pending.bun);
   results.push({
     name: "Bun installed (the official plugin runs on Bun)",
     ok: bun.ok,
@@ -82,7 +98,7 @@ export async function runChecks(): Promise<CheckResult[]> {
         : "Install Bun: curl -fsSL https://bun.sh/install | bash  (then open a new terminal)",
   });
 
-  const plugin = parsePluginList(run("claude", ["plugin", "list", "--json"]).out);
+  const plugin = parsePluginList((await pending.plugin).out);
   results.push({
     name: "Official Discord plugin installed",
     ok: plugin.installed && plugin.enabled,
@@ -101,7 +117,7 @@ export async function runChecks(): Promise<CheckResult[]> {
       detail: csc ? "csc.exe found" : "csc.exe not found",
       fix: "Enable .NET Framework 4.x (Windows Features). It is built into Windows 10/11 by default.",
     });
-    const wt = run("where", ["wt"]);
+    const wt = (await pending.wt);
     results.push({ name: "Windows Terminal", ok: wt.ok, detail: wt.ok ? "found" : "not found", fix: "Install Windows Terminal from the Microsoft Store." });
   }
   return results;

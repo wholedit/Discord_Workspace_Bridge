@@ -13,7 +13,13 @@
     "start": "node --use-system-ca --import tsx src/cli.ts start",
     "status": "node --use-system-ca --import tsx src/cli.ts status",
     "mode": "node --use-system-ca --import tsx src/cli.ts mode",
-    "add-manager": "node --use-system-ca --import tsx src/cli.ts add-manager"
+    "add-manager": "node --use-system-ca --import tsx src/cli.ts add-manager",
+    "setup": "node --use-system-ca --import tsx src/cli.ts setup",
+    "stop": "node --use-system-ca --import tsx src/cli.ts stop",
+    "start:bg": "node --use-system-ca --import tsx src/cli.ts start-bg",
+    "trust": "node --use-system-ca --import tsx src/cli.ts trust",
+    "autostart": "node --use-system-ca --import tsx src/cli.ts autostart",
+    "logs": "node --use-system-ca --import tsx src/cli.ts logs"
   },
   "keywords": [],
   "type": "module",
