@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test test/*.test.ts",
     "start": "node --use-system-ca --import tsx src/cli.ts start",
-    "status": "node --use-system-ca --import tsx src/cli.ts status"
+    "status": "node --use-system-ca --import tsx src/cli.ts status",
+    "mode": "node --use-system-ca --import tsx src/cli.ts mode"
   },
   "keywords": [],
   "type": "module",

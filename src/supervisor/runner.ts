@@ -66,6 +66,7 @@ export class WorkspaceRunner {
   private failures = 0;
   private quickResumeFailures = 0;
   private timer?: NodeJS.Timeout;
+  private generation = 0; // events from an older claude process (after a restart) are ignored
   private logTimer?: NodeJS.Timeout;
   private tail: string[] = [];
   private partial = "";
@@ -116,8 +117,9 @@ export class WorkspaceRunner {
     this.startedAt = startedAt;
     this.set("starting", `${spec.resume ? "resuming" : "new"} session ${spec.sessionId.slice(0, 8)}`);
 
-    this.pty.onData((d) => this.onOutput(d));
-    this.pty.onExit(({ exitCode }) => this.onExit(exitCode, startedAt, spec.resume));
+    const gen = ++this.generation;
+    this.pty.onData((d) => gen === this.generation && this.onOutput(d));
+    this.pty.onExit(({ exitCode }) => gen === this.generation && this.onExit(exitCode, startedAt, spec.resume));
     this.watchPluginLog(startedAt);
   }
 

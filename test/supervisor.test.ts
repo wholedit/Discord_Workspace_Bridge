@@ -281,3 +281,51 @@ test("hook script writes a short event and never the file contents", () => {
   delete env.WSB_EVENTS;
   assert.equal(spawnSync(process.execPath, [path.join("hooks", "progress-hook.mjs")], { input, env }).status, 0);
 });
+
+// ---------- permission mode ----------
+
+test("permission mode: auto by default, configurable, friendly names", async () => {
+  const { parsePermissionMode, modeOf } = await import("../src/workspaces.js");
+  assert.equal(modeOf(ws), "auto");
+  const a = spec.buildSpec(ws, { claudeHome });
+  assert.equal(a.args[a.args.indexOf("--permission-mode") + 1], "auto");
+  const m = spec.buildSpec({ ...ws, permissionMode: "manual" }, { claudeHome });
+  assert.equal(m.args[m.args.indexOf("--permission-mode") + 1], "manual");
+  assert.equal(parsePermissionMode("Manual"), "manual");
+  assert.equal(parsePermissionMode("default"), "manual");
+  assert.equal(parsePermissionMode("accept-edits"), "acceptEdits");
+  assert.equal(parsePermissionMode("bypassPermissions"), null);
+  assert.equal(parsePermissionMode("dontAsk"), null);
+});
+
+test("mode command saves the mode and resets to default by removing it", async () => {
+  const { upsertWorkspace, loadWorkspaces } = await import("../src/workspaces.js");
+  const { modeCommand } = await import("../src/mode.js");
+  upsertWorkspace({ ...ws, name: "modews" });
+  const quiet = console.log;
+  console.log = () => {};
+  try {
+    modeCommand("modews", "manual");
+    assert.equal(loadWorkspaces().find((w) => w.name === "modews")?.permissionMode, "manual");
+    modeCommand("modews", "auto");
+    assert.equal(loadWorkspaces().find((w) => w.name === "modews")?.permissionMode, undefined);
+    modeCommand("modews", "bypassPermissions");
+    assert.equal(loadWorkspaces().find((w) => w.name === "modews")?.permissionMode, undefined);
+  } finally {
+    console.log = quiet;
+    process.exitCode = 0;
+  }
+});
+
+test("restart starts exactly one new claude (late exit of the old one is ignored)", async () => {
+  const { spawn, spawned } = fakePty();
+  const r = new runnerMod.WorkspaceRunner({ ...ws, name: "r4" }, runnerOpts(spawn));
+  r.start();
+  r.ws = { ...r.ws, permissionMode: "manual" };
+  r.restart(); // kills #1; its exit arrives a moment later
+  await sleep(80);
+  assert.equal(spawned.length, 2, "old process exit must not trigger another start");
+  assert.equal(spawned[1].args[spawned[1].args.indexOf("--permission-mode") + 1], "manual");
+  assert.notEqual(r.state, "restarting");
+  r.stop();
+});

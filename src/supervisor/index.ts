@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { DiscordApiError, DiscordRest } from "../discordApi.js";
 import { ensureBunShim } from "../bunShim.js";
-import { homeDir, loadWorkspaces, stateDir, type Workspace } from "../workspaces.js";
+import { homeDir, loadWorkspaces, modeOf, stateDir, type Workspace } from "../workspaces.js";
 import { WorkspaceRunner } from "./runner.js";
 import { ProgressReporter, tailEvents } from "./progress.js";
 import { eventsFile, resolveClaude, type Shim } from "./spec.js";
@@ -81,6 +81,7 @@ export async function runSupervisor(opts: { only?: string[]; fresh?: string[] } 
         folder: r.ws.folder,
         state: r.state,
         detail: r.detail,
+        mode: modeOf(r.ws),
         plugin: r.plugin,
         pluginDetail: r.pluginDetail,
         pid: r.pid ?? null,
@@ -136,7 +137,22 @@ export async function runSupervisor(opts: { only?: string[]; fresh?: string[] } 
     runner.start({ fresh: opts.fresh?.includes(ws.name) });
   }
 
+  // Apply permission-mode changes made with `npm run mode` while we run: restart just that workspace.
+  const watchModes = setInterval(() => {
+    for (const latest of loadWorkspaces()) {
+      const r = runners.find((x) => x.ws.name === latest.name);
+      if (!r || modeOf(latest) === modeOf(r.ws)) continue;
+      r.ws = latest;
+      writeStatus();
+      if (r.state === "needs-trust" || r.state === "failed" || r.state === "stopped") continue; // applies on next start
+      log(`[${latest.name}] permission mode → ${modeOf(latest)}; restarting (conversation continues)`);
+      r.restart();
+    }
+  }, 3000);
+  cleanups.push(() => clearInterval(watchModes));
+
   writeStatus();
+  for (const r of runners) log(`[${r.ws.name}] permission mode: ${modeOf(r.ws)}`);
   log(`Supervisor running ${runners.length} workspace(s). Press Ctrl+C to stop all.`);
 
   const shutdown = () => {
@@ -187,6 +203,6 @@ export function printStatus() {
             ? `plugin failed: ${w.pluginDetail}`
             : "plugin starting…";
     const pid = w.pid ? `pid ${w.pid}` : "";
-    console.log(`${icon[w.state] ?? "?"} ${w.name.padEnd(14)} ${w.state.padEnd(11)} #${String(w.channel).padEnd(14)} ${pid.padEnd(10)} ${plugin}  restarts ${w.restarts}`);
+    console.log(`${icon[w.state] ?? "?"} ${w.name.padEnd(14)} ${w.state.padEnd(11)} #${String(w.channel).padEnd(14)} ${pid.padEnd(10)} ${String(w.mode ?? "auto").padEnd(11)} ${plugin}  restarts ${w.restarts}`);
   }
 }

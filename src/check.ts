@@ -4,15 +4,18 @@
 import { spawnSync } from "node:child_process";
 import { PLUGIN_ID } from "./workspaces.js";
 import { pingDiscord } from "./discordApi.js";
+import { cleanEnv } from "./supervisor/spec.js";
 
 export type CheckResult = { name: string; ok: boolean; detail: string; fix?: string };
 
 function run(cmd: string, args: string[]): { ok: boolean; out: string } {
   // On Windows, go through the shell so .cmd/.exe shims on PATH resolve. Args are fixed strings, never user input.
+  // cleanEnv: a debugger variable inherited from the Claude app's terminal makes claude itself fail to start.
+  const env = cleanEnv();
   const r =
     process.platform === "win32"
-      ? spawnSync([cmd, ...args].join(" "), { encoding: "utf8", shell: true, timeout: 60_000 })
-      : spawnSync(cmd, args, { encoding: "utf8", timeout: 60_000 });
+      ? spawnSync([cmd, ...args].join(" "), { encoding: "utf8", shell: true, timeout: 60_000, env })
+      : spawnSync(cmd, args, { encoding: "utf8", timeout: 60_000, env });
   return { ok: r.status === 0, out: (r.stdout ?? "") + (r.stderr ?? "") };
 }
 

@@ -17,7 +17,31 @@ export type Workspace = {
   channelId: string;
   channelName: string;
   userId: string; // the only Discord user allowed to drive this workspace
+  permissionMode?: PermissionMode; // missing = auto
 };
+
+/**
+ * Permission modes we offer (claude --permission-mode). bypassPermissions and dontAsk are left out on purpose:
+ * this is remote control of a real PC.
+ * - auto: a safety classifier approves low-risk actions; risky ones still ask (approval buttons arrive by DM)
+ * - manual: every edit and command asks for approval by DM
+ * - acceptEdits: file edits are approved automatically; commands ask
+ * - plan: Claude only plans and changes nothing
+ */
+export const PERMISSION_MODES = ["auto", "manual", "acceptEdits", "plan"] as const;
+export type PermissionMode = (typeof PERMISSION_MODES)[number];
+export const DEFAULT_PERMISSION_MODE: PermissionMode = "auto";
+export const modeOf = (ws: Workspace): PermissionMode => ws.permissionMode ?? DEFAULT_PERMISSION_MODE;
+
+/** Accepts a few friendly spellings (case-insensitive). */
+export function parsePermissionMode(s: string): PermissionMode | null {
+  const k = s.trim().toLowerCase();
+  if (k === "auto") return "auto";
+  if (k === "manual" || k === "default" || k === "ask") return "manual";
+  if (k === "acceptedits" || k === "accept-edits" || k === "edits") return "acceptEdits";
+  if (k === "plan") return "plan";
+  return null;
+}
 
 export function homeDir(): string {
   return process.env.WORKSPACE_BRIDGE_HOME ?? path.join(os.homedir(), ".workspace-bridge");

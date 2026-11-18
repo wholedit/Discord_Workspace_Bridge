@@ -5,6 +5,7 @@ import { removeWorkspace } from "./remove.js";
 import { launchAll } from "./launch.js";
 import { loadWorkspaces } from "./workspaces.js";
 import { runSupervisor, printStatus } from "./supervisor/index.js";
+import { modeCommand } from "./mode.js";
 
 const [cmd, ...args] = process.argv.slice(2);
 
@@ -48,6 +49,9 @@ switch (cmd) {
   case "status":
     printStatus();
     break;
+  case "mode":
+    modeCommand(args[0], args[1]);
+    break;
   case "launch": {
     const all = loadWorkspaces();
     const names = args.filter((a) => !a.startsWith("--"));
@@ -65,6 +69,7 @@ switch (cmd) {
   npm start [-- names]          run workspaces in the background (no windows), restart them, show progress
          -- --fresh=web         start these with a new conversation
   npm run status                show what the supervisor is doing
+  npm run mode -- <name> <mode> permission mode: auto (default), manual, acceptEdits, plan
   npm run launch [-- names]     visible mode: open workspaces in Windows Terminal tabs
                                 (use once per folder to answer the trust question)
          -- --dry-run           show what would run

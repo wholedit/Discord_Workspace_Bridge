@@ -28,6 +28,7 @@ npm start
 | `npm run add` | 워크스페이스 추가 (봇 토큰 → 채널 → 폴더) |
 | `npm start` | 모든 워크스페이스를 창 없이 실행, 자동 재시작, 진행 표시 |
 | `npm run status` | 실행 상태 보기 |
+| `npm run mode -- 이름 모드` | 권한 모드 바꾸기: `auto`(기본), `manual`, `acceptEdits`, `plan` |
 | `npm run launch -- 이름` | 창 모드로 열기 (폴더 신뢰 확인을 처음 한 번 할 때) |
 | `npm run list` / `npm run remove -- 이름` | 목록 보기 / 삭제 |
 

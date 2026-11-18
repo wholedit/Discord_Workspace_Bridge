@@ -6,7 +6,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { PLUGIN_ID, claudeProjectDir, stateDir, type Workspace } from "../workspaces.js";
+import { PLUGIN_ID, claudeProjectDir, modeOf, stateDir, type Workspace } from "../workspaces.js";
 
 export type ClaudeCommand = { file: string; prefixArgs: string[] };
 export type Shim = { dir: string; realBun: string };
@@ -103,7 +103,18 @@ export function buildSpec(ws: Workspace, opts: { fresh?: boolean; shim?: Shim; b
   const sessionId = getSessionId(ws, opts.fresh);
   const resume = sessionExists(ws, sessionId, opts.claudeHome);
   const settings = writeHookSettings(ws);
-  const args = [resume ? "--resume" : "--session-id", sessionId, "--name", ws.name, "--channels", `plugin:${PLUGIN_ID}`, "--settings", settings];
+  const args = [
+    resume ? "--resume" : "--session-id",
+    sessionId,
+    "--name",
+    ws.name,
+    "--permission-mode",
+    modeOf(ws),
+    "--channels",
+    `plugin:${PLUGIN_ID}`,
+    "--settings",
+    settings,
+  ];
 
   const env = cleanEnv(opts.baseEnv ?? process.env);
   env.DISCORD_STATE_DIR = stateDir(ws.name);
