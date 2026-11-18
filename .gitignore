@@ -1,0 +1,8 @@
+node_modules/
+*.log
+
+# Secrets and per-machine settings — never commit
+.env
+.claude/settings.local.json
+
+# Bot tokens and workspace state live outside the repo, in ~/.workspace-bridge/

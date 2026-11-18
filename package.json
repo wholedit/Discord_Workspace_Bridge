@@ -1,0 +1,31 @@
+{
+  "name": "workspace-bridge",
+  "version": "1.0.0",
+  "description": "Control local Claude Code workspaces from Discord on your phone, one bot per workspace, using the official Discord channel plugin",
+  "scripts": {
+    "check": "node --use-system-ca --import tsx src/cli.ts check",
+    "add": "node --use-system-ca --import tsx src/cli.ts add",
+    "list": "node --use-system-ca --import tsx src/cli.ts list",
+    "remove": "node --use-system-ca --import tsx src/cli.ts remove",
+    "launch": "node --use-system-ca --import tsx src/cli.ts launch",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/*.test.ts"
+  },
+  "keywords": [],
+  "type": "module",
+  "dependencies": {
+    "discord.js": "^14.28.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=22.15"
+  },
+  "bin": {
+    "workspace-bridge": "src/cli.ts"
+  }
+}
